@@ -23,15 +23,21 @@ async def _google_get(url: str, access_token: str) -> dict:
 
 @router.get("/projects")
 async def list_gas_projects(access_token: str = Query(...)):
-    data = await _google_get(f"{GAS_BASE}/projects", access_token)
-    projects = data.get("projects", [])
+    # Drive API: list GAS script files (mimeType = google-apps.script)
+    url = (
+        f"{DRIVE_BASE}/files"
+        "?q=mimeType%3D'application%2Fvnd.google-apps.script'"
+        "&fields=files(id%2Cname%2Cparents)"
+        "&pageSize=100"
+    )
+    data = await _google_get(url, access_token)
     return [
         {
-            "scriptId": p["scriptId"],
-            "title": p.get("title", ""),
-            "parentId": p.get("parentId"),
+            "scriptId": f["id"],
+            "title": f.get("name", ""),
+            "parentId": f.get("parents", [None])[0],
         }
-        for p in projects
+        for f in data.get("files", [])
     ]
 
 
