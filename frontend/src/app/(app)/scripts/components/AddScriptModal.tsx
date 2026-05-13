@@ -63,7 +63,6 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
   const loadGoogleData = useCallback(async () => {
     setLoadingGoogle(true);
     setGoogleError(null);
-    console.log("[Google Import] token present:", !!googleToken, "length:", googleToken?.length);
     try {
       const [projects, driveSheets] = await Promise.all([
         fetchGasProjects(googleToken),
