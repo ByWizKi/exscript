@@ -6,6 +6,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: [
+            "openid",
+            "email",
+            "profile",
+            "https://www.googleapis.com/auth/script.projects.readonly",
+            "https://www.googleapis.com/auth/drive.readonly",
+          ].join(" "),
+        },
+      },
     }),
   ],
   pages: {
@@ -18,6 +29,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async jwt({ token, account }) {
       if (account?.id_token) {
+        token.googleAccessToken = account.access_token;
+
         const res = await fetch(
           `${process.env.INTERNAL_API_URL}/auth/google`,
           {
@@ -43,6 +56,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         throw new Error("AccessDenied");
       }
       session.backendToken = token.backendToken as string;
+      session.googleAccessToken = token.googleAccessToken as string;
       session.user = token.user as typeof session.user;
       return session;
     },
