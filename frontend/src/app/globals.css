@@ -128,3 +128,12 @@ body {
 
 [data-t="dark"]  .l-footer { color: rgba(255,255,255,0.15); }
 [data-t="light"] .l-footer { color: rgba(0,20,65,0.22); }
+
+/* ── App layout background (dark mode via .dark class) ── */
+.app-bg {
+  background: radial-gradient(ellipse at 30% 60%, #d8e2f5 0%, #edf0f9 65%);
+  transition: background 0.3s ease;
+}
+.dark .app-bg {
+  background: radial-gradient(ellipse at 30% 60%, #001f5e 0%, #001441 65%);
+}

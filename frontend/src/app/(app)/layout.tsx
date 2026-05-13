@@ -68,8 +68,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="fixed inset-0 flex z-50 transition-colors duration-300"
-      style={{ background: "light-dark(radial-gradient(ellipse at 30% 60%, #d8e2f5 0%, #edf0f9 65%), radial-gradient(ellipse at 30% 60%, #001f5e 0%, #001441 65%))" }}
+      className="fixed inset-0 flex z-50 app-bg"
     >
       <BackgroundOrbs />
 
