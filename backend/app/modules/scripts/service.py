@@ -1,6 +1,7 @@
 from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.db.models.script import Script, ScriptVersion, ScriptFile
 from .schemas import ScriptCreate
 
@@ -71,23 +72,12 @@ async def list_scripts(db: AsyncSession) -> list[dict]:
 
 
 async def get_script(script_id: int, db: AsyncSession) -> Script | None:
-    result = await db.execute(select(Script).where(Script.id == script_id))
-    script = result.scalar_one_or_none()
-    if not script:
-        return None
-
-    ver_result = await db.execute(
-        select(ScriptVersion)
-        .where(ScriptVersion.script_id == script_id)
-        .order_by(ScriptVersion.version_number.desc())
-        .limit(1)
+    result = await db.execute(
+        select(Script)
+        .where(Script.id == script_id)
+        .options(selectinload(Script.versions).selectinload(ScriptVersion.files))
     )
-    latest = ver_result.scalar_one_or_none()
-    if latest:
-        files_result = await db.execute(
-            select(ScriptFile).where(ScriptFile.version_id == latest.id)
-        )
-        latest.files = list(files_result.scalars().all())
-        script.versions = [latest]
-
+    script = result.scalar_one_or_none()
+    if script and script.versions:
+        script.versions = [max(script.versions, key=lambda v: v.version_number)]
     return script
