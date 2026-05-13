@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Code2, Sheet, GitBranch, Clock } from "lucide-react";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -25,7 +26,8 @@ interface Props {
 export function ScriptCard({ script }: Props) {
   const status = script.latest_status ?? "draft";
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 hover:border-extia-yellow/30 transition-all duration-200 hover:shadow-lg hover:shadow-extia-yellow/5">
+    <Link href={`/scripts/${script.id}`} className="block">
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-5 hover:border-extia-yellow/30 transition-all duration-200 hover:shadow-lg hover:shadow-extia-yellow/5">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-extia-yellow/10 flex items-center justify-center flex-shrink-0">
@@ -59,5 +61,6 @@ export function ScriptCard({ script }: Props) {
         </div>
       </div>
     </div>
+    </Link>
   );
 }
