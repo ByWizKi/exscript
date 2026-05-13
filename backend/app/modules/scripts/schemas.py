@@ -61,3 +61,23 @@ class ScriptListItem(BaseModel):
     latest_status: str | None
 
     model_config = {"from_attributes": True}
+
+
+class AIModifyRequest(BaseModel):
+    prompt: str
+
+
+class AIFileResult(BaseModel):
+    filename: str
+    content: str
+    file_type: str
+
+
+class AIModifyResponse(BaseModel):
+    files: list[AIFileResult]
+    version_message: str
+
+
+class VersionCreate(BaseModel):
+    files: list[ScriptFileIn]
+    message: str

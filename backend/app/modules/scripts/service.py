@@ -81,3 +81,92 @@ async def get_script(script_id: int, db: AsyncSession) -> Script | None:
     if script and script.versions:
         script.versions = [max(script.versions, key=lambda v: v.version_number)]
     return script
+
+
+import json
+import re
+
+
+async def ai_modify_script(
+    script_id: int,
+    prompt: str,
+    db: AsyncSession,
+) -> dict:
+    from app.modules.settings.service import get_provider_instance
+    from app.llm.base import LLMMessage
+
+    script = await get_script(script_id, db)
+    if not script:
+        raise ValueError("Script not found")
+
+    latest = script.versions[0] if script.versions else None
+    if not latest or not latest.files:
+        raise ValueError("No files found in the latest version")
+
+    files_context = "\n\n".join(
+        f"### {f.filename}\n```javascript\n{f.content}\n```"
+        for f in latest.files
+    )
+
+    system_prompt = (
+        "You are a Google Apps Script expert. "
+        "The user will describe a modification to make to their GAS project. "
+        "You must return ONLY a valid JSON object (no markdown, no explanation) with this exact structure:\n"
+        '{"files": [{"filename": "...", "content": "...", "file_type": "..."}], '
+        '"version_message": "short description of what was changed"}\n'
+        "Include ALL files (modified and unmodified). "
+        "file_type values: server_js, html, json."
+    )
+
+    user_message = (
+        f"Here are the current files:\n\n{files_context}\n\n"
+        f"Please make the following modification:\n{prompt}"
+    )
+
+    provider = await get_provider_instance(db)
+    raw = await provider.complete([
+        LLMMessage(role="system", content=system_prompt),
+        LLMMessage(role="user", content=user_message),
+    ])
+
+    json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not json_match:
+        raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
+
+    return json.loads(json_match.group())
+
+
+async def add_version(
+    script_id: int,
+    files: list,
+    message: str,
+    owner_email: str,
+    db: AsyncSession,
+) -> Script:
+    script = await get_script(script_id, db)
+    if not script:
+        raise ValueError("Script not found")
+
+    next_number = (
+        max((v.version_number for v in script.versions), default=0) + 1
+    )
+
+    version = ScriptVersion(
+        script_id=script_id,
+        version_number=next_number,
+        message=message,
+        created_by=owner_email,
+    )
+    db.add(version)
+    await db.flush()
+
+    for f in files:
+        db.add(ScriptFile(
+            version_id=version.id,
+            filename=f.filename,
+            content=f.content,
+            file_type=f.file_type,
+        ))
+
+    await db.commit()
+    return await get_script(script_id, db)
