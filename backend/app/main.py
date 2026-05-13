@@ -5,8 +5,10 @@ from app.db.session import engine, Base
 from app.modules.auth.router import router as auth_router
 from app.modules.scripts.router import router as scripts_router
 from app.modules.google.router import router as google_router
+from app.modules.settings.router import router as settings_router
 import app.db.models.script as _script_models  # noqa: F401
 import app.db.models.user as _user_models  # noqa: F401
+import app.db.models.setting as _setting_models  # noqa: F401
 
 
 @asynccontextmanager
@@ -29,6 +31,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth")
 app.include_router(scripts_router, prefix="/scripts")
 app.include_router(google_router, prefix="/google")
+app.include_router(settings_router, prefix="/settings")
 
 
 @app.get("/health")
