@@ -89,6 +89,7 @@ export default function ScriptsPage() {
       {showModal && (
         <AddScriptModal
           token={session?.backendToken ?? ""}
+          googleToken={session?.googleAccessToken ?? ""}
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); fetchScripts(); }}
         />
