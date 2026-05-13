@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy import String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, timezone
