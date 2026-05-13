@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { X, Plus, Trash2, ChevronRight, ChevronLeft, Loader2, Cloud, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Loader2 } from "lucide-react";
 import {
   fetchGasProjects,
   fetchGasFiles,
@@ -10,24 +10,12 @@ import {
   type DriveSheet,
 } from "@/hooks/useGoogleApis";
 
-interface FileEntry {
-  filename: string;
-  content: string;
-  file_type: string;
-}
-
 interface Props {
   token: string;
   googleToken: string;
   onClose: () => void;
   onSuccess: () => void;
 }
-
-const FILE_TYPES = [
-  { value: "server_js", label: "JavaScript (.js)" },
-  { value: "html",      label: "HTML (.html)" },
-  { value: "json",      label: "JSON (appsscript.json)" },
-];
 
 function typeToFileType(type: string): string {
   if (type === "HTML") return "html";
@@ -43,93 +31,63 @@ function typeToExtension(type: string, name: string): string {
 }
 
 export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [gasProjects, setGasProjects] = useState<GasProject[]>([]);
+  const [sheets, setSheets] = useState<DriveSheet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [selectedProject, setSelectedProject] = useState<GasProject | null>(null);
+  const [selectedSheet, setSelectedSheet] = useState<DriveSheet | null>(null);
   const [name, setName] = useState("");
-  const [gasScriptId, setGasScriptId] = useState("");
-  const [spreadsheetId, setSpreadsheetId] = useState("");
-  const [versionMessage, setVersionMessage] = useState("Version initiale");
-  const [files, setFiles] = useState<FileEntry[]>([
-    { filename: "Code.js", content: "", file_type: "server_js" },
-  ]);
+
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [gasProjects, setGasProjects] = useState<GasProject[] | null>(null);
-  const [sheets, setSheets] = useState<DriveSheet[] | null>(null);
-  const [loadingGoogle, setLoadingGoogle] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
-  const [importingFiles, setImportingFiles] = useState(false);
-
-  const loadGoogleData = useCallback(async () => {
-    setLoadingGoogle(true);
-    setGoogleError(null);
-    try {
-      const [projects, driveSheets] = await Promise.all([
-        fetchGasProjects(googleToken),
-        fetchSheets(googleToken),
-      ]);
-      setGasProjects(projects);
-      setSheets(driveSheets);
-    } catch (e) {
-      setGoogleError(e instanceof Error ? e.message : "Erreur Google API");
-    } finally {
-      setLoadingGoogle(false);
-    }
+  // Auto-load on open
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const [projects, driveSheets] = await Promise.all([
+          fetchGasProjects(googleToken),
+          fetchSheets(googleToken),
+        ]);
+        setGasProjects(projects);
+        setSheets(driveSheets);
+      } catch (e) {
+        setLoadError(e instanceof Error ? e.message : "Erreur Google API");
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [googleToken]);
 
-  const handleSelectGasProject = (project: GasProject) => {
-    setGasScriptId(project.scriptId);
-    setName((prev) => prev || project.title);
-    if (project.parentId) setSpreadsheetId(project.parentId);
-  };
-
-  const handleSelectSheet = (sheet: DriveSheet) => {
-    setSpreadsheetId(sheet.id);
-  };
-
-  const handleImportFiles = async () => {
-    if (!gasScriptId) return;
-    setImportingFiles(true);
-    setError(null);
-    try {
-      const gasFiles = await fetchGasFiles(googleToken, gasScriptId);
-      if (gasFiles.length === 0) {
-        setError("Aucun fichier trouvé dans ce projet GAS.");
-        return;
-      }
-      setFiles(
-        gasFiles.map((f) => ({
-          filename: typeToExtension(f.type, f.name),
-          content: f.source,
-          file_type: typeToFileType(f.type),
-        }))
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur import fichiers");
-    } finally {
-      setImportingFiles(false);
+  const handleSelectProject = (project: GasProject) => {
+    setSelectedProject(project);
+    setName(project.title);
+    // Auto-select sheet if parentId matches
+    if (project.parentId) {
+      const match = sheets.find((s) => s.id === project.parentId);
+      if (match) setSelectedSheet(match);
     }
   };
 
-  const addFile = () =>
-    setFiles((f) => [...f, { filename: "", content: "", file_type: "server_js" }]);
+  const canCreate = !!selectedProject && !!selectedSheet && name.trim() !== "";
 
-  const removeFile = (i: number) =>
-    setFiles((f) => f.filter((_, idx) => idx !== i));
-
-  const updateFile = (i: number, field: keyof FileEntry, value: string) =>
-    setFiles((f) =>
-      f.map((file, idx) => (idx === i ? { ...file, [field]: value } : file))
-    );
-
-  const step1Valid = name.trim() !== "" && gasScriptId.trim() !== "" && spreadsheetId.trim() !== "";
-  const step2Valid = files.length > 0 && files.every((f) => f.filename.trim() !== "" && f.content.trim() !== "");
-
-  const handleSubmit = async () => {
-    if (!step2Valid) return;
+  const handleCreate = async () => {
+    if (!canCreate) return;
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     try {
+      // Import files from GAS
+      const gasFiles = await fetchGasFiles(googleToken, selectedProject!.scriptId);
+      const files = gasFiles.map((f) => ({
+        filename: typeToExtension(f.type, f.name),
+        content: f.source,
+        file_type: typeToFileType(f.type),
+      }));
+
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/scripts`, {
         method: "POST",
         headers: {
@@ -137,11 +95,11 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name,
-          gas_script_id: gasScriptId,
-          spreadsheet_id: spreadsheetId,
-          version_message: versionMessage,
-          files,
+          name: name.trim(),
+          gas_script_id: selectedProject!.scriptId,
+          spreadsheet_id: selectedSheet!.id,
+          version_message: "Version initiale",
+          files: files.length > 0 ? files : [{ filename: "Code.js", content: "// empty", file_type: "server_js" }],
         }),
       });
       if (!res.ok) {
@@ -150,7 +108,7 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
       }
       onSuccess();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
+      setSaveError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
       setSaving(false);
     }
@@ -158,18 +116,13 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-2xl bg-[#0d1b3e] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-lg bg-[#0d1b3e] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
-          <div>
-            <h2 className="font-heading font-black text-white text-lg">
-              Ajouter un projet GAS
-            </h2>
-            <p className="text-white/40 text-xs mt-0.5">
-              Étape {step}/2 — {step === 1 ? "Informations du projet" : "Fichiers source"}
-            </p>
-          </div>
+          <h2 className="font-heading font-black text-white text-lg">
+            Ajouter un projet <span className="text-extia-yellow">GAS</span>
+          </h2>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
@@ -178,264 +131,105 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
           </button>
         </div>
 
-        {/* Progress bar */}
-        <div className="h-1 bg-white/10 flex-shrink-0">
-          <div
-            className="h-1 bg-extia-yellow transition-all duration-300"
-            style={{ width: step === 1 ? "50%" : "100%" }}
-          />
-        </div>
-
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          {step === 1 ? (
-            <>
-              {/* Google import section */}
-              <div className="bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Cloud className="h-4 w-4 text-extia-yellow" />
-                    <span className="text-white/70 text-xs font-medium">Importer depuis Google</span>
-                  </div>
-                  <button
-                    onClick={loadGoogleData}
-                    disabled={loadingGoogle}
-                    className="flex items-center gap-1.5 text-xs text-extia-yellow hover:text-white transition-colors disabled:opacity-50"
-                  >
-                    {loadingGoogle
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <RefreshCw className="h-3.5 w-3.5" />
-                    }
-                    {gasProjects === null ? "Charger" : "Rafraîchir"}
-                  </button>
-                </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-                {googleError && (
-                  <p className="text-red-400 text-xs">{googleError}</p>
-                )}
-
-                {gasProjects !== null && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-white/40 text-xs mb-1.5">Projets Apps Script</p>
-                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                        {gasProjects.length === 0 && (
-                          <p className="text-white/30 text-xs">Aucun projet trouvé</p>
-                        )}
-                        {gasProjects.map((p) => (
-                          <button
-                            key={p.scriptId}
-                            onClick={() => handleSelectGasProject(p)}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
-                              gasScriptId === p.scriptId
-                                ? "bg-extia-yellow/20 text-extia-yellow border border-extia-yellow/30"
-                                : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-transparent"
-                            }`}
-                          >
-                            {p.title}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-white/40 text-xs mb-1.5">Google Sheets</p>
-                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                        {sheets?.length === 0 && (
-                          <p className="text-white/30 text-xs">Aucun sheet trouvé</p>
-                        )}
-                        {sheets?.map((s) => (
-                          <button
-                            key={s.id}
-                            onClick={() => handleSelectSheet(s)}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
-                              spreadsheetId === s.id
-                                ? "bg-extia-yellow/20 text-extia-yellow border border-extia-yellow/30"
-                                : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-transparent"
-                            }`}
-                          >
-                            {s.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Manual fields */}
-              <div>
-                <label className="block text-white/70 text-xs font-medium mb-1.5">
-                  Nom du projet *
-                </label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="AutomatRyma — Kickoff"
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder-white/25 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-white/70 text-xs font-medium mb-1.5">
-                  Google Apps Script ID *
-                </label>
-                <input
-                  value={gasScriptId}
-                  onChange={(e) => setGasScriptId(e.target.value)}
-                  placeholder="1BxY_abc123..."
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder-white/25 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-extia-yellow transition-colors"
-                />
-                <p className="text-white/30 text-xs mt-1">
-                  Visible dans l&apos;URL de l&apos;éditeur Apps Script
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-white/70 text-xs font-medium mb-1.5">
-                  Spreadsheet ID *
-                </label>
-                <input
-                  value={spreadsheetId}
-                  onChange={(e) => setSpreadsheetId(e.target.value)}
-                  placeholder="1ohFViZs2Rd9eWKTxen7..."
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder-white/25 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-extia-yellow transition-colors"
-                />
-                <p className="text-white/30 text-xs mt-1">
-                  Dans l&apos;URL du Google Sheet : /spreadsheets/d/<strong className="text-white/50">ID</strong>/edit
-                </p>
-              </div>
-            </>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-extia-yellow" />
+              <p className="text-white/40 text-sm">Chargement depuis Google Drive…</p>
+            </div>
+          ) : loadError ? (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3">
+              {loadError}
+            </div>
           ) : (
             <>
+              {/* GAS Projects */}
               <div>
-                <label className="block text-white/70 text-xs font-medium mb-1.5">
-                  Message de version
-                </label>
-                <input
-                  value={versionMessage}
-                  onChange={(e) => setVersionMessage(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <p className="text-white/40 text-xs">Fichiers source *</p>
-                <div className="flex items-center gap-3">
-                  {gasScriptId && (
-                    <button
-                      onClick={handleImportFiles}
-                      disabled={importingFiles}
-                      className="flex items-center gap-1.5 text-xs text-extia-yellow hover:text-white transition-colors disabled:opacity-50"
-                    >
-                      {importingFiles
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <Cloud className="h-3.5 w-3.5" />
-                      }
-                      Importer depuis GAS
-                    </button>
+                <p className="text-white/50 text-xs font-medium mb-2">Projet Apps Script</p>
+                <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                  {gasProjects.length === 0 && (
+                    <p className="text-white/30 text-xs py-2">Aucun projet Apps Script trouvé</p>
                   )}
-                  <button
-                    onClick={addFile}
-                    className="flex items-center gap-1 text-extia-yellow text-xs font-medium transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Ajouter un fichier
-                  </button>
+                  {gasProjects.map((p) => (
+                    <button
+                      key={p.scriptId}
+                      onClick={() => handleSelectProject(p)}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                        selectedProject?.scriptId === p.scriptId
+                          ? "bg-extia-yellow/20 text-extia-yellow border border-extia-yellow/30"
+                          : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-transparent"
+                      }`}
+                    >
+                      {p.title}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="space-y-3">
-                {files.map((file, i) => (
-                  <div
-                    key={i}
-                    className="bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={file.filename}
-                        onChange={(e) => updateFile(i, "filename", e.target.value)}
-                        placeholder="Config.js"
-                        className="flex-1 bg-white/5 border border-white/10 text-white placeholder-white/25 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-extia-yellow transition-colors"
-                      />
-                      <select
-                        value={file.file_type}
-                        onChange={(e) => updateFile(i, "file_type", e.target.value)}
-                        className="bg-white/5 border border-white/10 text-white/70 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-extia-yellow transition-colors"
-                      >
-                        {FILE_TYPES.map((t) => (
-                          <option key={t.value} value={t.value} className="bg-[#0d1b3e]">
-                            {t.label}
-                          </option>
-                        ))}
-                      </select>
-                      {files.length > 1 && (
-                        <button
-                          onClick={() => removeFile(i)}
-                          className="text-white/30 hover:text-red-400 transition-colors flex-shrink-0"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    <textarea
-                      value={file.content}
-                      onChange={(e) => updateFile(i, "content", e.target.value)}
-                      placeholder="// Collez le contenu du fichier ici"
-                      rows={6}
-                      className="w-full bg-black/30 border border-white/10 text-white/80 placeholder-white/20 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-extia-yellow transition-colors resize-none"
-                    />
-                  </div>
-                ))}
+              {/* Sheets */}
+              <div>
+                <p className="text-white/50 text-xs font-medium mb-2">Google Sheet associé</p>
+                <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                  {sheets.length === 0 && (
+                    <p className="text-white/30 text-xs py-2">Aucun Google Sheet trouvé</p>
+                  )}
+                  {sheets.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedSheet(s)}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                        selectedSheet?.id === s.id
+                          ? "bg-extia-yellow/20 text-extia-yellow border border-extia-yellow/30"
+                          : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-transparent"
+                      }`}
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {/* Name */}
+              {selectedProject && (
+                <div>
+                  <label className="block text-white/50 text-xs font-medium mb-1.5">
+                    Nom du projet
+                  </label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
+                  />
+                </div>
+              )}
             </>
           )}
 
-          {error && (
+          {saveError && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3">
-              {error}
+              {saveError}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 flex-shrink-0">
-          {step === 2 ? (
-            <button
-              onClick={() => setStep(1)}
-              className="flex items-center gap-1.5 text-white/50 hover:text-white text-sm transition-colors"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Retour
-            </button>
-          ) : (
-            <button
-              onClick={onClose}
-              className="text-white/50 hover:text-white text-sm transition-colors"
-            >
+        {!loading && !loadError && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 flex-shrink-0">
+            <button onClick={onClose} className="text-white/50 hover:text-white text-sm transition-colors">
               Annuler
             </button>
-          )}
-
-          {step === 1 ? (
             <button
-              onClick={() => setStep(2)}
-              disabled={!step1Valid}
-              className="flex items-center gap-2 bg-extia-yellow hover:bg-extia-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed text-extia-night font-bold px-5 py-2.5 rounded-xl text-sm transition-colors"
-            >
-              Suivant <ChevronRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={!step2Valid || saving}
+              onClick={handleCreate}
+              disabled={!canCreate || saving}
               className="flex items-center gap-2 bg-extia-yellow hover:bg-extia-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed text-extia-night font-bold px-5 py-2.5 rounded-xl text-sm transition-colors"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              Créer le projet
+              {saving ? "Import en cours…" : "Créer le projet"}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
