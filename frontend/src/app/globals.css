@@ -2,8 +2,129 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  * {
-    box-sizing: border-box;
-  }
+/* ── Charte graphique Extia Ingénierie ───────────────────────────────────── */
+/* Mont — titres */
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-Hairline.ttf") format("truetype"); font-weight: 100; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-HairlineItalic.ttf") format("truetype"); font-weight: 100; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-Thin.ttf") format("truetype"); font-weight: 200; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-ThinItalic.ttf") format("truetype"); font-weight: 200; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-ExtraLight.ttf") format("truetype"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-ExtraLightItalic.ttf") format("truetype"); font-weight: 300; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-Light.ttf") format("truetype"); font-weight: 350; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-LightItalic.ttf") format("truetype"); font-weight: 350; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-RegularItalic.ttf") format("truetype"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-Book.ttf") format("truetype"); font-weight: 450; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-BookItalic.ttf") format("truetype"); font-weight: 450; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-SemiBold.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-SemiBoldItalic.ttf") format("truetype"); font-weight: 600; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-BoldItalic.ttf") format("truetype"); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-Black.ttf") format("truetype"); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-BlackItalic.ttf") format("truetype"); font-weight: 800; font-style: italic; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-Heavy.ttf") format("truetype"); font-weight: 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Mont"; src: url("/fonts/Mont-HeavyItalic.ttf") format("truetype"); font-weight: 900; font-style: italic; font-display: swap; }
+
+/* Gotham Rounded — corps de texte */
+@font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-Light.otf") format("opentype"); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-LightIta.otf") format("opentype"); font-weight: 300; font-style: italic; font-display: swap; }
+@font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-Book.otf") format("opentype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-BookIta.otf") format("opentype"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-Medium.otf") format("opentype"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-MedIta.otf") format("opentype"); font-weight: 500; font-style: italic; font-display: swap; }
+@font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-Bold.otf") format("opentype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-BoldIta.otf") format("opentype"); font-weight: 700; font-style: italic; font-display: swap; }
+
+:root {
+  --background: #f8f9fb;
+  --foreground: #001441;
+  --font-heading: "Mont";
+  --font-sans: "Gotham Rounded", "Montserrat", ui-sans-serif, system-ui, sans-serif;
 }
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans);
+}
+
+.font-heading {
+  font-family: var(--font-heading), var(--font-sans), ui-sans-serif, sans-serif;
+}
+
+.animate-fade-in { animation: fade-in 0.3s ease-out both; }
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Login page ──────────────────────────────────────── */
+.l-root[data-t="dark"]  { background: radial-gradient(ellipse at 25% 55%, #001f5e 0%, #001441 62%); }
+.l-root[data-t="light"] { background: radial-gradient(ellipse at 25% 55%, #dde4f4 0%, #edf0f9 62%); }
+
+.orb {
+  position: absolute;
+  width: 520px; height: 520px;
+  border-radius: 50%;
+  filter: blur(110px);
+  pointer-events: none;
+  z-index: 0;
+  animation: orb-float 22s infinite alternate;
+}
+.orb-1 { top: -8%; right: -4%; animation-delay: 0s; }
+.orb-2 { bottom: -10%; left: -5%; animation-delay: -8s; }
+[data-t="dark"]  .orb-1 { background: radial-gradient(circle, rgba(255,213,0,0.5), transparent); opacity: 0.55; }
+[data-t="dark"]  .orb-2 { background: radial-gradient(circle, rgba(0,60,180,0.6), transparent); opacity: 0.5; }
+[data-t="light"] .orb-1 { background: radial-gradient(circle, rgba(255,213,0,0.7), transparent); opacity: 0.18; }
+[data-t="light"] .orb-2 { background: radial-gradient(circle, rgba(0,60,180,0.5), transparent); opacity: 0.12; }
+@keyframes orb-float {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(55px, 90px); }
+}
+
+.l-toggle { transition: background 0.3s ease, color 0.3s ease; border-radius: 50%; }
+[data-t="dark"]  .l-toggle { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+[data-t="dark"]  .l-toggle:hover { background: rgba(255,255,255,0.14); color: white; }
+[data-t="light"] .l-toggle { background: rgba(0,20,65,0.07); color: rgba(0,20,65,0.65); }
+[data-t="light"] .l-toggle:hover { background: rgba(0,20,65,0.13); color: rgb(0 20 65); }
+
+.l-card { transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease; }
+[data-t="dark"] .l-card {
+  background: rgba(255,255,255,0.035);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 30px 60px -12px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.04);
+}
+[data-t="light"] .l-card {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0,20,65,0.08);
+  box-shadow: 0 30px 60px -12px rgba(0,20,65,0.16), 0 0 0 1px rgba(0,20,65,0.04);
+}
+
+[data-t="dark"]  .brand-ex  { color: rgb(255 213 0); text-shadow: 0 0 28px rgba(255,213,0,0.55); }
+[data-t="dark"]  .brand-ref { color: white; }
+[data-t="dark"]  .brand-sub { color: rgba(255,255,255,0.33); }
+[data-t="light"] .brand-ex  { color: rgb(255 213 0); text-shadow: 0 0 20px rgba(255,213,0,0.35); }
+[data-t="light"] .brand-ref { color: rgb(0 20 65); }
+[data-t="light"] .brand-sub { color: rgba(0,20,65,0.42); }
+
+.btn-google { transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; }
+[data-t="dark"]  .btn-google { background: white; color: #111827; }
+[data-t="dark"]  .btn-google:hover:not(:disabled) { background: #f3f4f6; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+[data-t="light"] .btn-google { background: white; color: #111827; border: 1px solid rgba(0,20,65,0.12); box-shadow: 0 2px 8px rgba(0,20,65,0.07); }
+[data-t="light"] .btn-google:hover:not(:disabled) { background: #f9fafb; transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0,20,65,0.12); }
+
+.btn-yellow {
+  background: rgb(255 213 0);
+  color: rgb(0 20 65);
+  box-shadow: 0 10px 20px -4px rgba(255,213,0,0.38);
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.btn-yellow:hover:not(:disabled) { background: #f0c800; transform: translateY(-2px); box-shadow: 0 18px 28px -6px rgba(255,213,0,0.48); }
+.btn-yellow:active:not(:disabled) { transform: translateY(0); }
+
+[data-t="dark"]  .l-footer { color: rgba(255,255,255,0.15); }
+[data-t="light"] .l-footer { color: rgba(0,20,65,0.22); }
