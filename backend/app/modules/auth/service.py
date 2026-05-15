@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from google.auth.transport import requests as google_requests
@@ -41,7 +41,7 @@ async def authenticate_google(token: str, db: AsyncSession) -> dict:
     else:
         user.name = info.get("name", user.name)
         user.picture = info.get("picture", user.picture)
-        user.last_login = datetime.now(UTC)
+        user.last_login = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(user)

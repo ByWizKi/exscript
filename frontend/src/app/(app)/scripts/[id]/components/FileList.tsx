@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 
 import { FileCode2, ChevronRight } from "lucide-react";
 import type { ScriptFile, AiResult } from "../types";

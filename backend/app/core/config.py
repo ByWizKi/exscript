@@ -36,4 +36,4 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 
-settings = Settings()  # type: ignore[call-arg]
+settings = Settings()  # type: ignore[call-arg]  # pyright: ignore[reportCallIssue]

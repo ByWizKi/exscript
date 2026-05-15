@@ -1,5 +1,4 @@
 "use client";
-import React from "react";
 
 import type { ScriptFile, AiResult } from "../types";
 
@@ -30,6 +29,7 @@ export function CodeViewer({
           </div>
 
           {pendingResult && previewContent !== null ? (
+            /* Diff view */
             <div className="flex-1 overflow-auto grid grid-cols-2 divide-x divide-white/10">
               <div className="overflow-auto">
                 <div className="px-3 py-1.5 border-b border-white/10 bg-white/[0.02]">
@@ -53,6 +53,7 @@ export function CodeViewer({
               </div>
             </div>
           ) : (
+            /* Plain viewer */
             <div className="flex-1 overflow-auto">
               <pre className="p-4 text-[11px] text-white/65 font-mono whitespace-pre leading-relaxed">
                 {selectedFile.content}

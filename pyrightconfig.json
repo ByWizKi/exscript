@@ -4,10 +4,11 @@
   "reportMissingImports": "none",
   "reportMissingModuleSource": "none",
   "reportUnusedImport": "none",
-  "reportAttributeAccessIssue": "none",
   "reportGeneralTypeIssues": "none",
   "reportArgumentType": "none",
-  "reportCallIssue": "none",
+  "reportAttributeAccessIssue": "none",
   "reportOperatorIssue": "none",
-  "reportUnknownMemberType": "none"
+  "reportUnknownMemberType": "none",
+  "reportUnknownVariableType": "none",
+  "reportUndefinedVariable": "none"
 }

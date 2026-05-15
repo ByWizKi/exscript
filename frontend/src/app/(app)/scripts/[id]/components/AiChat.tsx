@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 import { Loader2, Bot, Send, AlertCircle } from "lucide-react";
 import type { ChatMessage, ScriptFile, AiResult } from "../types";
 
