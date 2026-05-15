@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 480
     google_client_id: str
     allowed_domain: str = "extia-inge.fr"
+    encryption_key: str = ""
 
     class Config:
         env_file = ".env"

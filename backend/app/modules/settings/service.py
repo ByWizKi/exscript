@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.crypto import decrypt, encrypt
 from app.db.models.setting import Setting
 
 from .schemas import LLMSettingsIn, LLMSettingsOut
@@ -26,12 +27,12 @@ async def _set(db: AsyncSession, key: str, value: str) -> None:
 async def get_llm_settings(db: AsyncSession) -> LLMSettingsOut:
     provider = await _get(db, "llm_provider") or "openai"
     model = await _get(db, "llm_model") or "gpt-4o"
-    api_key = await _get(db, "llm_api_key")
+    raw_api_key = await _get(db, "llm_api_key")
     base_url = await _get(db, "llm_base_url")
     return LLMSettingsOut(
         provider=provider,
         model=model,
-        api_key_set=bool(api_key),
+        api_key_set=bool(raw_api_key),
         base_url=base_url,
     )
 
@@ -40,7 +41,7 @@ async def save_llm_settings(data: LLMSettingsIn, db: AsyncSession) -> LLMSetting
     await _set(db, "llm_provider", data.provider)
     await _set(db, "llm_model", data.model)
     if data.api_key:
-        await _set(db, "llm_api_key", data.api_key)
+        await _set(db, "llm_api_key", encrypt(data.api_key))
     await _set(db, "llm_base_url", data.base_url)
     await db.commit()
     return await get_llm_settings(db)
@@ -51,8 +52,9 @@ async def get_provider_instance(db: AsyncSession):
 
     provider = await _get(db, "llm_provider") or "openai"
     model = await _get(db, "llm_model") or "gpt-4o"
-    api_key = await _get(db, "llm_api_key")
+    raw_api_key = await _get(db, "llm_api_key")
+    decrypted_key = decrypt(raw_api_key) if raw_api_key else ""
     base_url = await _get(db, "llm_base_url") or None
-    if not api_key and provider != "ollama":
+    if not decrypted_key and provider != "ollama":
         raise ValueError("LLM API key not configured. Go to Settings to configure it.")
-    return get_provider(name=provider, model=model, api_key=api_key, base_url=base_url)
+    return get_provider(name=provider, model=model, api_key=decrypted_key, base_url=base_url)
