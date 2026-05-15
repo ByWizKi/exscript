@@ -1,9 +1,7 @@
 {
   "pythonVersion": "3.12",
-  "pythonPlatform": "Linux",
-  "venvPath": ".",
-  "extraPaths": ["."],
+  "typeCheckingMode": "basic",
   "reportMissingImports": "none",
   "reportMissingModuleSource": "none",
-  "reportGeneralTypeIssues": "none"
+  "reportUnusedImport": "none"
 }

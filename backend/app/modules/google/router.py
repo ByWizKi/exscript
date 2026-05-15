@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 
-logger = logging.getLogger(__name__)
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -78,7 +79,11 @@ async def list_gas_projects(access_token: str = Query(...)):
             if sid:
                 script_ids.add(sid)
 
-    print(f"[DEBUG] unique script_ids={len(script_ids)} sheets={len(sheets)}")
+    logger.debug(
+        "list_gas_projects_collected",
+        unique_script_ids=len(script_ids),
+        sheets=len(sheets),
+    )
 
     # Appels parallèles pour récupérer les métadonnées de chaque script
     async def fetch_project(client: httpx.AsyncClient, sid: str) -> dict | None:
@@ -110,7 +115,7 @@ async def list_gas_projects(access_token: str = Query(...)):
                 }
             )
 
-    print(f"[DEBUG] final results={len(results)}")
+    logger.debug("list_gas_projects_final", results_count=len(results))
     return results
 
 
@@ -125,7 +130,7 @@ async def check_sheet_script(sheet_id: str, access_token: str = Query(...)):
             "&fields=files(id,name)&includeItemsFromAllDrives=true&supportsAllDrives=true",
             headers={"Authorization": f"Bearer {access_token}"},
         )
-        print(f"[CHECK] parent search status={r1.status_code} body={r1.text[:300]}")
+        logger.debug("check_sheet_script_parent_search", status=r1.status_code, body=r1.text[:300])
         if r1.is_success:
             files = r1.json().get("files", [])
             if files:
@@ -147,8 +152,11 @@ async def check_sheet_script(sheet_id: str, access_token: str = Query(...)):
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             body_text = r2.text[:300]
-            print(
-                f"[CHECK] name search for '{sheet_name}' status={r2.status_code} body={body_text}"
+            logger.debug(
+                "check_sheet_script_name_search",
+                sheet_name=sheet_name,
+                status=r2.status_code,
+                body=body_text,
             )
             if r2.is_success:
                 files2 = r2.json().get("files", [])
@@ -164,7 +172,7 @@ async def check_sheet_script(sheet_id: str, access_token: str = Query(...)):
 
 @router.get("/projects/{script_id}/files")
 async def get_gas_files(script_id: str, access_token: str = Query(...)):
-    data = await _google_get(f"{GAS_BASE}/projects/{script_id}/content", access_token)
+    data = await _google_get(f"{GAS_BASE}/projects/{script_id}/content", access_token) or {}
     files = data.get("files", [])
     return [
         {
@@ -187,5 +195,5 @@ async def list_sheets(access_token: str = Query(...)):
         "&includeItemsFromAllDrives=true"
         "&supportsAllDrives=true"
     )
-    data = await _google_get(url, access_token)
+    data = await _google_get(url, access_token) or {}
     return [{"id": f["id"], "name": f["name"]} for f in data.get("files", [])]

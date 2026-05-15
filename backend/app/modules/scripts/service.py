@@ -222,7 +222,7 @@ async def add_version(
     message: str,
     owner_email: str,
     db: AsyncSession,
-) -> Script:
+) -> Script | None:
     script = await get_script(script_id, db)
     if not script:
         raise ValueError("Script not found")

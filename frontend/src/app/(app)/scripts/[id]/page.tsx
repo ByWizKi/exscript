@@ -117,10 +117,10 @@ export default function ScriptDetailPage() {
     try {
       // Build conversation history (user/assistant pairs, exclude errors)
       const history = messages
-        .filter((m) => !m.error)
-        .map((m) => ({
+        .filter((m: ChatMessage) => !m.error)
+        .map((m: ChatMessage) => ({
           role: m.role,
-          content: m.role === "assistant" ? m.text : m.text,
+          content: m.text,
         }));
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-modify`, {
@@ -141,21 +141,21 @@ export default function ScriptDetailPage() {
       setPendingResult(result);
       // auto-select first modified file
       const firstMod = result.files.find(
-        (f) => f.content !== currentFiles.find((cf) => cf.filename === f.filename)?.content
+        (f: AiFile) => f.content !== currentFiles.find((cf: ScriptFile) => cf.filename === f.filename)?.content
       );
       if (firstMod) setSelectedFilename(firstMod.filename);
-      setMessages((prev) => [
+      setMessages((prev: ChatMessage[]) => [
         ...prev,
         {
-          role: "assistant",
+          role: "assistant" as const,
           text: result.version_message,
           result,
         },
       ]);
     } catch (e) {
-      setMessages((prev) => [
+      setMessages((prev: ChatMessage[]) => [
         ...prev,
-        { role: "assistant", text: "", error: e instanceof Error ? e.message : "Erreur inconnue" },
+        { role: "assistant" as const, text: "", error: e instanceof Error ? e.message : "Erreur inconnue" },
       ]);
     } finally {
       setAiLoading(false);
@@ -550,7 +550,7 @@ export default function ScriptDetailPage() {
               <div className="flex items-center justify-between">
                 <span className="text-white/20 text-[10px]">⌘ + Entrée</span>
                 <button
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   disabled={!prompt.trim() || aiLoading}
                   className="flex items-center gap-1.5 bg-extia-yellow hover:bg-extia-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed text-extia-night font-bold px-3 py-1.5 rounded-lg text-xs transition-colors"
                 >
