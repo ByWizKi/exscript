@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' || true)
+
+if [ -n "$STAGED_PY" ]; then
+  echo "→ Ruff on Python files..."
+  docker compose exec -T api ruff check $STAGED_PY || exit 1
+fi
+
+if [ -n "$STAGED_TS" ]; then
+  echo "→ ESLint on TS files..."
+  (cd frontend && npx eslint $STAGED_TS) || exit 1
+fi
+
+echo "✓ Pre-commit OK"
