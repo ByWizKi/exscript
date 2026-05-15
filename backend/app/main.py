@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import os
 from app.db.session import engine, Base
 from app.modules.auth.router import router as auth_router
 from app.modules.scripts.router import router as scripts_router
@@ -18,7 +19,17 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="ExScript API", lifespan=lifespan)
+# Enable OpenAPI docs in development, disable in production
+environment = os.getenv("ENVIRONMENT", "development")
+docs_url = "/docs" if environment != "production" else None
+redoc_url = "/redoc" if environment != "production" else None
+
+app = FastAPI(
+    title="ExScript API",
+    lifespan=lifespan,
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+)
 
 app.add_middleware(
     CORSMiddleware,
