@@ -1,85 +1,188 @@
 "use client";
 
-import { useState } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { useRef, useEffect } from "react";
+import { Loader2, Bot, Send, AlertCircle } from "lucide-react";
+import type { ChatMessage, ScriptFile, AiResult } from "../types";
 
-interface AiFile {
-  filename: string;
-  content: string;
-  file_type: string;
+interface AiChatProps {
+  messages: ChatMessage[];
+  aiLoading: boolean;
+  currentFiles: ScriptFile[];
+  onSend: (prompt: string) => void;
+  onSelectFile?: (filename: string, result: AiResult) => void;
+  prompt: string;
+  onPromptChange: (text: string) => void;
 }
 
-interface AiResult {
-  files: AiFile[];
-  version_message: string;
-}
+export function AiChat({
+  messages,
+  aiLoading,
+  currentFiles,
+  onSend,
+  onSelectFile,
+  prompt,
+  onPromptChange,
+}: AiChatProps) {
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-interface Props {
-  scriptId: number;
-  token: string;
-  onResult: (result: AiResult) => void;
-}
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, aiLoading]);
 
-export function AiChat({ scriptId, token, onResult }: Props) {
-  const [prompt, setPrompt] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const handleSend = () => {
+    onSend(prompt);
+  };
 
-  const handleSubmit = async () => {
-    if (!prompt.trim() || loading) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${scriptId}/ai-modify`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ prompt }),
-        }
-      );
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.detail ?? "Erreur serveur");
-      }
-      const result: AiResult = await res.json();
-      onResult(result);
-      setPrompt("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur inconnue");
-    } finally {
-      setLoading(false);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      handleSend();
     }
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2">
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit(); }}
-          placeholder="Décris la modification à apporter… (ex: Ajoute une colonne Statut dans l'onglet Recap)"
-          rows={3}
-          className="flex-1 bg-white/5 border border-white/10 text-white placeholder-white/25 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-extia-yellow transition-colors resize-none"
-        />
-        <button
-          onClick={handleSubmit}
-          disabled={!prompt.trim() || loading}
-          className="flex-shrink-0 w-12 bg-extia-yellow hover:bg-extia-yellow-hover disabled:opacity-40 text-extia-night rounded-xl flex items-center justify-center transition-colors"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </button>
-      </div>
-      <p className="text-white/25 text-xs">Cmd/Ctrl+Entrée pour envoyer</p>
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3">
-          {error}
+    <aside className="w-80 flex-shrink-0 flex flex-col bg-extia-night/20">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 flex-shrink-0">
+        <div className="w-6 h-6 rounded-lg bg-extia-yellow/20 flex items-center justify-center">
+          <Bot className="h-3.5 w-3.5 text-extia-yellow" />
         </div>
-      )}
-    </div>
+        <span className="font-heading font-bold text-white text-sm">
+          Assistant IA
+        </span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {messages.length === 0 && !aiLoading && (
+          <div className="py-6 space-y-4">
+            <div className="text-center">
+              <Bot className="h-8 w-8 text-white/15 mx-auto mb-3" />
+              <p className="text-white/30 text-xs leading-relaxed">
+                Décris une modification à apporter à ton script.
+                <br />
+                L&apos;IA va analyser les fichiers et proposer les changements.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              {[
+                "Ajoute une validation des données avant traitement",
+                "Optimise les performances de la boucle principale",
+                "Ajoute des logs pour faciliter le débogage",
+                "Explique ce que fait ce script",
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => onSend(suggestion)}
+                  className="w-full text-left text-[11px] text-white/40 hover:text-white/70 bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.06] rounded-xl px-3 py-2 transition-all"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            {msg.role === "user" ? (
+              <div className="max-w-[85%] bg-extia-yellow/15 border border-extia-yellow/25 text-white text-xs rounded-2xl rounded-tr-sm px-3 py-2.5">
+                {msg.text}
+              </div>
+            ) : msg.error ? (
+              <div className="max-w-[90%] bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-2xl rounded-tl-sm px-3 py-2.5 flex items-start gap-2">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                <span>{msg.error}</span>
+              </div>
+            ) : (
+              <div className="max-w-[90%] space-y-2">
+                <div className="bg-white/[0.06] border border-white/10 text-white/80 text-xs rounded-2xl rounded-tl-sm px-3 py-2.5">
+                  <p className="font-medium text-extia-yellow mb-1">
+                    Modifications prêtes
+                  </p>
+                  <p className="text-white/60">{msg.text}</p>
+                  {msg.result && (
+                    <div className="mt-2 pt-2 border-t border-white/10 space-y-1">
+                      {msg.result.files.map((f) => {
+                        const orig = currentFiles.find(
+                          (cf) => cf.filename === f.filename
+                        )?.content;
+                        const changed = orig !== f.content;
+                        return (
+                          <button
+                            key={f.filename}
+                            onClick={() => {
+                              onSelectFile?.(f.filename, msg.result!);
+                            }}
+                            className="flex items-center gap-1.5 w-full text-left hover:text-white transition-colors"
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                changed
+                                  ? "bg-extia-yellow"
+                                  : "bg-white/20"
+                              }`}
+                            />
+                            <span
+                              className={`text-[10px] font-mono ${
+                                changed
+                                  ? "text-extia-yellow"
+                                  : "text-white/40"
+                              }`}
+                            >
+                              {f.filename}
+                            </span>
+                            {changed && (
+                              <span className="text-[9px] text-white/30">
+                                modifié
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {aiLoading && (
+          <div className="flex justify-start">
+            <div className="bg-white/[0.06] border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-extia-yellow" />
+              <span className="text-white/40 text-xs">Analyse en cours…</span>
+            </div>
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
+
+      <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-white/10">
+        <div className="flex flex-col gap-2">
+          <textarea
+            value={prompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ex: Ajoute une colonne Statut dans l'onglet Recap…"
+            rows={3}
+            disabled={aiLoading}
+            className="w-full bg-white/5 border border-white/10 text-white placeholder-white/20 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-extia-yellow transition-colors resize-none disabled:opacity-50"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-white/20 text-[10px]">⌘ + Entrée</span>
+            <button
+              onClick={handleSend}
+              disabled={!prompt.trim() || aiLoading}
+              className="flex items-center gap-1.5 bg-extia-yellow hover:bg-extia-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed text-extia-night font-bold px-3 py-1.5 rounded-lg text-xs transition-colors"
+            >
+              <Send className="h-3 w-3" />
+              Envoyer
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
   );
 }
