@@ -39,13 +39,13 @@
   --background: #f8f9fb;
   --foreground: #001441;
   --font-heading: "Mont";
-  --font-sans: "Gotham Rounded", var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Gotham Rounded";
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: var(--font-sans);
+  font-family: "Gotham Rounded", ui-sans-serif, system-ui, sans-serif;
 }
 
 .font-heading {

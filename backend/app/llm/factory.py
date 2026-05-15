@@ -1,8 +1,9 @@
 from __future__ import annotations
-from .base import LLMProvider
-from .openai_provider import OpenAIProvider
+
 from .anthropic_provider import AnthropicProvider
+from .base import LLMProvider
 from .gemini_provider import GeminiProvider
+from .openai_provider import OpenAIProvider
 
 
 def get_provider(name: str, model: str, api_key: str, base_url: str | None = None) -> LLMProvider:

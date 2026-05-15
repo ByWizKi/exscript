@@ -1,14 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2 } from "lucide-react";
-import {
-  fetchGasProjects,
-  fetchGasFiles,
-  fetchSheets,
-  type GasProject,
-  type DriveSheet,
-} from "@/hooks/useGoogleApis";
+import { X, Loader2, Sheet, AlertCircle, Search, CheckCircle } from "lucide-react";
+import { fetchSheets, fetchGasFiles, type DriveSheet } from "@/hooks/useGoogleApis";
 
 interface Props {
   token: string;
@@ -31,30 +25,25 @@ function typeToExtension(type: string, name: string): string {
 }
 
 export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props) {
-  const [gasProjects, setGasProjects] = useState<GasProject[]>([]);
   const [sheets, setSheets] = useState<DriveSheet[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
-  const [selectedProject, setSelectedProject] = useState<GasProject | null>(null);
   const [selectedSheet, setSelectedSheet] = useState<DriveSheet | null>(null);
+  const [scriptUrl, setScriptUrl] = useState("");
+  const [scriptId, setScriptId] = useState("");
   const [name, setName] = useState("");
-
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Auto-load on open
   useEffect(() => {
     (async () => {
       setLoading(true);
       setLoadError(null);
       try {
-        const [projects, driveSheets] = await Promise.all([
-          fetchGasProjects(googleToken),
-          fetchSheets(googleToken),
-        ]);
-        setGasProjects(projects);
-        setSheets(driveSheets);
+        const s = await fetchSheets(googleToken);
+        setSheets(s);
       } catch (e) {
         setLoadError(e instanceof Error ? e.message : "Erreur Google API");
       } finally {
@@ -63,25 +52,38 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
     })();
   }, [googleToken]);
 
-  const handleSelectProject = (project: GasProject) => {
-    setSelectedProject(project);
-    setName(project.title);
-    // Auto-select sheet if parentId matches
-    if (project.parentId) {
-      const match = sheets.find((s) => s.id === project.parentId);
-      if (match) setSelectedSheet(match);
-    }
+  const extractScriptId = (input: string): string => {
+    const match = input.match(/\/projects\/([a-zA-Z0-9_-]{20,})/);
+    if (match) return match[1];
+    if (/^[a-zA-Z0-9_-]{20,}$/.test(input.trim())) return input.trim();
+    return "";
   };
 
-  const canCreate = !!selectedProject && !!selectedSheet && name.trim() !== "";
+  const handleSelectSheet = (sheet: DriveSheet) => {
+    setSelectedSheet(sheet);
+    setName(sheet.name);
+    setScriptUrl("");
+    setScriptId("");
+    setSaveError(null);
+  };
+
+  const handleScriptUrl = (val: string) => {
+    setScriptUrl(val);
+    setScriptId(extractScriptId(val));
+  };
+
+  const filtered = sheets.filter((s) =>
+    s.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const canCreate = !!selectedSheet && !!scriptId && name.trim() !== "";
 
   const handleCreate = async () => {
-    if (!canCreate) return;
+    if (!canCreate || !selectedSheet) return;
     setSaving(true);
     setSaveError(null);
     try {
-      // Import files from GAS
-      const gasFiles = await fetchGasFiles(googleToken, selectedProject!.scriptId);
+      const gasFiles = await fetchGasFiles(googleToken, scriptId);
       const files = gasFiles.map((f) => ({
         filename: typeToExtension(f.type, f.name),
         content: f.source,
@@ -96,8 +98,8 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
         },
         body: JSON.stringify({
           name: name.trim(),
-          gas_script_id: selectedProject!.scriptId,
-          spreadsheet_id: selectedSheet!.id,
+          gas_script_id: scriptId,
+          spreadsheet_id: selectedSheet.id,
           version_message: "Version initiale",
           files: files.length > 0 ? files : [{ filename: "Code.js", content: "// empty", file_type: "server_js" }],
         }),
@@ -121,95 +123,103 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
           <h2 className="font-heading font-black text-white text-lg">
-            Ajouter un projet <span className="text-extia-yellow">GAS</span>
+            Importer depuis <span className="text-extia-yellow">Google Drive</span>
           </h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
-          >
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <Loader2 className="h-6 w-6 animate-spin text-extia-yellow" />
-              <p className="text-white/40 text-sm">Chargement depuis Google Drive…</p>
+              <p className="text-white/40 text-sm">Chargement des Google Sheets…</p>
             </div>
           ) : loadError ? (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3">
-              {loadError}
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />{loadError}
             </div>
           ) : (
             <>
-              {/* GAS Projects */}
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/30" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Rechercher un Google Sheet…"
+                  className="w-full bg-white/5 border border-white/10 text-white placeholder-white/25 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
+                />
+              </div>
+
+              {/* Sheet list */}
               <div>
-                <p className="text-white/50 text-xs font-medium mb-2">Projet Apps Script</p>
-                <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
-                  {gasProjects.length === 0 && (
-                    <p className="text-white/30 text-xs py-2">Aucun projet Apps Script trouvé</p>
-                  )}
-                  {gasProjects.map((p) => (
-                    <button
-                      key={p.scriptId}
-                      onClick={() => handleSelectProject(p)}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                        selectedProject?.scriptId === p.scriptId
-                          ? "bg-extia-yellow/20 text-extia-yellow border border-extia-yellow/30"
-                          : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-transparent"
-                      }`}
-                    >
-                      {p.title}
-                    </button>
-                  ))}
+                <p className="text-white/40 text-xs mb-2">{filtered.length} sheets trouvés</p>
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                  {filtered.map((s) => {
+                    const isSelected = selectedSheet?.id === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => handleSelectSheet(s)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-colors border ${
+                          isSelected
+                            ? "bg-extia-yellow/15 border-extia-yellow/30"
+                            : "bg-white/5 border-transparent hover:bg-white/8"
+                        }`}
+                      >
+                        <Sheet className={`h-4 w-4 flex-shrink-0 ${isSelected ? "text-extia-yellow" : "text-white/35"}`} />
+                        <span className={`text-sm truncate ${isSelected ? "text-extia-yellow" : "text-white/70"}`}>{s.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Sheets */}
-              <div>
-                <p className="text-white/50 text-xs font-medium mb-2">Google Sheet associé</p>
-                <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
-                  {sheets.length === 0 && (
-                    <p className="text-white/30 text-xs py-2">Aucun Google Sheet trouvé</p>
-                  )}
-                  {sheets.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => setSelectedSheet(s)}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                        selectedSheet?.id === s.id
-                          ? "bg-extia-yellow/20 text-extia-yellow border border-extia-yellow/30"
-                          : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-transparent"
+              {/* Script URL + name */}
+              {selectedSheet && (
+                <div className="space-y-3 border-t border-white/10 pt-4">
+                  <div>
+                    <label className="block text-white/50 text-xs font-medium mb-1.5">
+                      URL ou ID du projet Apps Script <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      value={scriptUrl}
+                      onChange={(e) => handleScriptUrl(e.target.value)}
+                      placeholder="https://script.google.com/home/projects/ABC123…"
+                      className={`w-full bg-white/5 border text-white placeholder-white/25 rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-colors ${
+                        scriptId ? "border-green-500/40 focus:border-green-400" : "border-white/10 focus:border-extia-yellow"
                       }`}
-                    >
-                      {s.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                    />
+                    {scriptId ? (
+                      <p className="flex items-center gap-1.5 text-green-400 text-xs mt-1.5">
+                        <CheckCircle className="h-3 w-3" /> ID détecté : <span className="font-mono opacity-70">{scriptId.slice(0, 20)}…</span>
+                      </p>
+                    ) : (
+                      <p className="text-white/25 text-xs mt-1">
+                        Google Sheets → Extensions → Apps Script → copie l&apos;URL
+                      </p>
+                    )}
+                  </div>
 
-              {/* Name */}
-              {selectedProject && (
-                <div>
-                  <label className="block text-white/50 text-xs font-medium mb-1.5">
-                    Nom du projet
-                  </label>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
-                  />
+                  <div>
+                    <label className="block text-white/50 text-xs font-medium mb-1.5">Nom du projet dans ExScript</label>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
+                    />
+                  </div>
                 </div>
               )}
             </>
           )}
 
           {saveError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3">
-              {saveError}
+            <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />{saveError}
             </div>
           )}
         </div>
@@ -217,16 +227,14 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
         {/* Footer */}
         {!loading && !loadError && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 flex-shrink-0">
-            <button onClick={onClose} className="text-white/50 hover:text-white text-sm transition-colors">
-              Annuler
-            </button>
+            <button onClick={onClose} className="text-white/50 hover:text-white text-sm transition-colors">Annuler</button>
             <button
               onClick={handleCreate}
               disabled={!canCreate || saving}
               className="flex items-center gap-2 bg-extia-yellow hover:bg-extia-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed text-extia-night font-bold px-5 py-2.5 rounded-xl text-sm transition-colors"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saving ? "Import en cours…" : "Créer le projet"}
+              {saving ? "Import en cours…" : "Importer"}
             </button>
           </div>
         )}

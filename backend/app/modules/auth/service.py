@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
+from datetime import UTC, datetime
+
 from fastapi import HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.models.user import User
-from datetime import datetime, timezone
 
 
 async def authenticate_google(token: str, db: AsyncSession) -> dict:
@@ -16,8 +18,10 @@ async def authenticate_google(token: str, db: AsyncSession) -> dict:
         info = id_token.verify_oauth2_token(
             token, google_requests.Request(), settings.google_client_id
         )
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Google invalide")
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Google invalide"
+        ) from err
 
     email: str = info.get("email", "")
     domain = email.split("@")[-1] if "@" in email else ""
@@ -37,7 +41,7 @@ async def authenticate_google(token: str, db: AsyncSession) -> dict:
     else:
         user.name = info.get("name", user.name)
         user.picture = info.get("picture", user.picture)
-        user.last_login = datetime.now(timezone.utc)
+        user.last_login = datetime.now(UTC)
 
     await db.commit()
     await db.refresh(user)

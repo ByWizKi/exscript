@@ -81,7 +81,7 @@ export default function SettingsPage() {
   const currentProvider = PROVIDERS.find((p) => p.value === provider);
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-2xl mx-auto overflow-y-auto flex-1">
       <div className="mb-8">
         <h1 className="font-heading font-black text-2xl text-extia-night dark:text-white">
           Paramètres <span className="text-extia-yellow">LLM</span>

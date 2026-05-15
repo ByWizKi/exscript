@@ -19,8 +19,26 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "httpx"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "ruff>=0.6.0",
+    "mypy>=1.10.0",
+    "types-requests",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "UP", "N", "S", "PTH", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106"]
+"alembic/*" = ["E501"]

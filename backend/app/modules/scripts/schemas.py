@@ -1,6 +1,8 @@
 from __future__ import annotations
-from pydantic import BaseModel
+
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class ScriptFileIn(BaseModel):
@@ -63,8 +65,15 @@ class ScriptListItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
 class AIModifyRequest(BaseModel):
     prompt: str
+    google_access_token: str | None = None
+    history: list[ChatMessage] = []
 
 
 class AIFileResult(BaseModel):
@@ -81,3 +90,7 @@ class AIModifyResponse(BaseModel):
 class VersionCreate(BaseModel):
     files: list[ScriptFileIn]
     message: str
+
+
+class PushRequest(BaseModel):
+    access_token: str

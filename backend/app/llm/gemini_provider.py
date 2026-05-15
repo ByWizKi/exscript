@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import google.generativeai as genai
-from .base import LLMProvider, LLMMessage
+
+from .base import LLMMessage, LLMProvider
 
 
 class GeminiProvider(LLMProvider):
@@ -16,5 +18,6 @@ class GeminiProvider(LLMProvider):
             elif m.role == "user":
                 parts.append(f"[User]\n{m.content}")
         prompt = "\n\n".join(parts)
-        response = await self._model.generate_content_async(prompt)
+        config = genai.types.GenerationConfig(temperature=0)
+        response = await self._model.generate_content_async(prompt, generation_config=config)
         return response.text

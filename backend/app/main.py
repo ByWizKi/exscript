@@ -1,19 +1,21 @@
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import os
-from app.db.session import engine, Base
+
+import app.db.models.script as _script_models  # noqa: F401  # pyright: ignore[reportUnusedImport]
+import app.db.models.setting as _setting_models  # noqa: F401  # pyright: ignore[reportUnusedImport]
+import app.db.models.user as _user_models  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from app.db.session import Base, engine
 from app.modules.auth.router import router as auth_router
-from app.modules.scripts.router import router as scripts_router
 from app.modules.google.router import router as google_router
+from app.modules.scripts.router import router as scripts_router
 from app.modules.settings.router import router as settings_router
-import app.db.models.script as _script_models  # noqa: F401
-import app.db.models.user as _user_models  # noqa: F401
-import app.db.models.setting as _setting_models  # noqa: F401
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield

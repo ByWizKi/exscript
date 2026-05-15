@@ -38,7 +38,7 @@ export default function ScriptsPage() {
   useEffect(() => { fetchScripts(); }, [fetchScripts]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto overflow-y-auto flex-1">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>

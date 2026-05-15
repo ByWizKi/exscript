@@ -1,7 +1,10 @@
 from __future__ import annotations
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.models.setting import Setting
+
 from .schemas import LLMSettingsIn, LLMSettingsOut
 
 
@@ -45,6 +48,7 @@ async def save_llm_settings(data: LLMSettingsIn, db: AsyncSession) -> LLMSetting
 
 async def get_provider_instance(db: AsyncSession):
     from app.llm.factory import get_provider
+
     provider = await _get(db, "llm_provider") or "openai"
     model = await _get(db, "llm_model") or "gpt-4o"
     api_key = await _get(db, "llm_api_key")
