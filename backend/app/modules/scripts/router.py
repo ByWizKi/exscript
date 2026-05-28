@@ -97,6 +97,8 @@ async def ai_modify_endpoint(
         )
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=str(err)) from err
 
 
 @router.post("/{script_id}/pull", response_model=ScriptOut)
