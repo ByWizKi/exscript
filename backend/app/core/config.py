@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     google_client_id: str
     allowed_domain: str = "extia-inge.fr"
     encryption_key: str = ""
+    vertex_project_id: str = "exscript"
+    vertex_location: str = "europe-west1"
 
     @field_validator("jwt_secret")
     @classmethod

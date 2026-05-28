@@ -170,7 +170,7 @@ steps:
           --service-account=${_SERVICE}-api@$PROJECT_ID.iam.gserviceaccount.com \
           --update-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest \
           --timeout=3600 \
-          --set-env-vars=ENVIRONMENT=production,CORS_ORIGINS=$$FRONTEND_URL
+          --set-env-vars=ENVIRONMENT=production,CORS_ORIGINS=$$FRONTEND_URL,VERTEX_PROJECT_ID=$PROJECT_ID,VERTEX_LOCATION=${_REGION}
 
   # ── 9. Deploy frontend vers Cloud Run ─────────────────────────────────────
   - id: deploy-frontend

@@ -4,6 +4,7 @@ from .anthropic_provider import AnthropicProvider
 from .base import LLMProvider
 from .gemini_provider import GeminiProvider
 from .openai_provider import OpenAIProvider
+from .vertex_provider import VertexProvider
 
 
 def get_provider(name: str, model: str, api_key: str, base_url: str | None = None) -> LLMProvider:
@@ -14,10 +15,14 @@ def get_provider(name: str, model: str, api_key: str, base_url: str | None = Non
         return AnthropicProvider(api_key=api_key, model=model)
     if name == "gemini":
         return GeminiProvider(api_key=api_key, model=model)
+    if name == "vertex":
+        return VertexProvider(model=model)
     if name == "ollama":
         return OpenAIProvider(
             api_key="ollama",
             model=model,
             base_url=base_url or "http://localhost:11434/v1",
         )
-    raise ValueError(f"Unknown LLM provider: {name}. Supported: openai, anthropic, gemini, ollama")
+    raise ValueError(
+        f"Unknown LLM provider: {name}. Supported: openai, anthropic, gemini, vertex, ollama"
+    )

@@ -39,6 +39,6 @@ async def get_provider_instance(db: AsyncSession):
     raw_api_key = await get_setting(db, "llm_api_key")
     decrypted_key = decrypt(raw_api_key) if raw_api_key else ""
     base_url = await get_setting(db, "llm_base_url") or None
-    if not decrypted_key and provider != "ollama":
+    if not decrypted_key and provider not in ("ollama", "vertex"):
         raise ValueError("LLM API key not configured. Go to Settings to configure it.")
     return get_provider(name=provider, model=model, api_key=decrypted_key, base_url=base_url)
