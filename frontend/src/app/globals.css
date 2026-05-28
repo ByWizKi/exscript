@@ -38,18 +38,67 @@
 :root {
   --background: #f8f9fb;
   --foreground: #001441;
+  --card: #ffffff;
+  --card-border: #9bafd0;
+  --accent: #001441;
+  --accent-hover: #1d578c;
+  --extia-yellow: #ffd500;
+  --extia-yellow-hover: #e6c000;
+  --extia-night: #001441;
+  --extia-blue-mid: #4379b3;
+  --extia-blue-light: #9bafd0;
+  --extia-green: #8dbc6a;
+  --input-bg: #ffffff;
+  --input-border: #9bafd0;
   --font-heading: "Mont";
-  --font-sans: "Gotham Rounded", var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Gotham Rounded";
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: var(--font-sans);
+  font-family: "Gotham Rounded", ui-sans-serif, system-ui, sans-serif;
+}
+
+input,
+textarea,
+select {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--foreground);
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input:hover,
+textarea:hover,
+select:hover {
+  border-color: #4379b3;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: #FFD500;
+  box-shadow: 0 0 0 3px rgba(255, 213, 0, 0.15);
 }
 
 .font-heading {
   font-family: var(--font-heading), var(--font-sans), ui-sans-serif, sans-serif;
+}
+
+@layer components {
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 0.75rem;
+    box-shadow: 0 2px 8px rgba(0, 20, 65, 0.08);
+    padding: 1.25rem;
+    transition: box-shadow 0.2s ease;
+  }
+  .card:hover {
+    box-shadow: 0 4px 16px rgba(0, 20, 65, 0.12);
+  }
 }
 
 .animate-fade-in { animation: fade-in 0.3s ease-out both; }
@@ -137,3 +186,58 @@ body {
 .dark .app-bg {
   background: radial-gradient(ellipse at 30% 60%, #001f5e 0%, #001441 65%);
 }
+
+/* ── Dark mode overrides ─────────────────────────────────────────────────── */
+.dark .card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.dark .card:hover {
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.9);
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: rgba(255, 255, 255, 0.30);
+}
+.dark input:hover,
+.dark textarea:hover,
+.dark select:hover {
+  border-color: rgba(255, 255, 255, 0.20);
+}
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: #FFD500;
+  box-shadow: 0 0 0 3px rgba(255, 213, 0, 0.15);
+}
+
+.dark main .text-extia-night { color: rgba(255, 255, 255, 0.90) !important; }
+.dark main [class~="text-extia-night\/60"] { color: rgba(255, 255, 255, 0.60) !important; }
+.dark main [class~="text-extia-night\/70"] { color: rgba(255, 255, 255, 0.70) !important; }
+.dark main [class~="text-extia-night\/80"] { color: rgba(255, 255, 255, 0.80) !important; }
+.dark main [class~="text-extia-night\/50"] { color: rgba(255, 255, 255, 0.50) !important; }
+.dark main [class~="text-extia-night\/40"] { color: rgba(255, 255, 255, 0.40) !important; }
+.dark main [class~="font-heading"].text-extia-night { color: rgba(255, 255, 255, 0.95) !important; }
+
+.dark main .bg-white:not([class*="dark:bg-"]) { background-color: rgba(255, 255, 255, 0.04) !important; }
+
+/* ── Scrollbar custom ─────────────────────────────────────────────────────── */
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgba(0, 20, 65, 0.18) transparent; }
+.scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(0, 20, 65, 0.18); border-radius: 99px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(0, 20, 65, 0.32); }
+.dark .scrollbar-thin { scrollbar-color: rgba(255, 255, 255, 0.15) transparent; }
+.dark .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); }
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }

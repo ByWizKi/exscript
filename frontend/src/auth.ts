@@ -2,17 +2,20 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
+          hd: "extia-inge.fr",
           scope: [
             "openid",
             "email",
             "profile",
             "https://www.googleapis.com/auth/script.projects",
+            "https://www.googleapis.com/auth/script.processes",
             "https://www.googleapis.com/auth/drive",
           ].join(" "),
         },
@@ -24,8 +27,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     error: "/access-denied",
   },
   callbacks: {
-    async signIn({ account }) {
-      return !!account?.id_token;
+    async signIn({ account, profile }) {
+      if (!account?.id_token) return false;
+      const email = profile?.email ?? "";
+      return email.endsWith("@extia-inge.fr");
     },
     async jwt({ token, account }) {
       if (account?.id_token) {
@@ -57,7 +62,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       session.backendToken = token.backendToken as string;
       session.googleAccessToken = token.googleAccessToken as string;
-      session.user = token.user as typeof session.user;
+      session.user = token.user as unknown as typeof session.user;
       return session;
     },
   },

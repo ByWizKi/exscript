@@ -1,14 +1,10 @@
 import Link from "next/link";
-import { Code2, Sheet, GitBranch, Clock } from "lucide-react";
+import { GitBranch, Clock, ArrowRight, Pencil } from "lucide-react";
 
-const STATUS_STYLE: Record<string, string> = {
-  draft:    "bg-white/10 text-white/60 border-white/20",
-  tested:   "bg-extia-green/20 text-extia-green border-extia-green/30",
-  deployed: "bg-extia-yellow/20 text-extia-yellow border-extia-yellow/30",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Brouillon", tested: "Testé", deployed: "Déployé",
+const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
+  draft:    { label: "Brouillon", dot: "bg-slate-400 dark:bg-white/30",          text: "text-slate-500 dark:text-white/40" },
+  tested:   { label: "Testé",     dot: "bg-extia-green",                          text: "text-extia-green" },
+  deployed: { label: "Déployé",   dot: "bg-extia-yellow",                         text: "text-extia-yellow" },
 };
 
 interface Props {
@@ -21,46 +17,54 @@ interface Props {
     latest_status: string | null;
     created_at: string;
   };
+  onEdit: () => void;
 }
 
-export function ScriptCard({ script }: Props) {
+export function ScriptCard({ script, onEdit }: Props) {
   const status = script.latest_status ?? "draft";
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
+
   return (
-    <Link href={`/scripts/${script.id}`} className="block">
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-5 hover:border-extia-yellow/30 transition-all duration-200 hover:shadow-lg hover:shadow-extia-yellow/5">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-extia-yellow/10 flex items-center justify-center flex-shrink-0">
-            <Code2 className="h-5 w-5 text-extia-yellow" />
+    <div className="group relative">
+      <Link href={`/scripts/${script.id}`} className="block">
+        <div className="card relative rounded-2xl p-5 transition-all duration-200 hover:border-extia-yellow/50 dark:hover:border-extia-yellow/30">
+
+          {/* Top row */}
+          <div className="flex items-start justify-between mb-4">
+            <h3 className="font-heading font-black text-base text-extia-night dark:text-white leading-tight pr-10">
+              {script.name}
+            </h3>
+            <ArrowRight className="h-4 w-4 text-slate-300 dark:text-white/20 group-hover:text-extia-yellow transition-colors flex-shrink-0 mt-0.5" />
           </div>
-          <div>
-            <h3 className="font-semibold text-white text-sm">{script.name}</h3>
-            <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border mt-1 ${STATUS_STYLE[status]}`}>
-              {STATUS_LABEL[status] ?? status}
+
+          {/* Meta */}
+          <div className="flex items-center gap-4 text-xs text-slate-400 dark:text-white/35">
+            <span className="flex items-center gap-1.5">
+              <GitBranch className="h-3.5 w-3.5" />
+              {script.version_count} version{script.version_count !== 1 ? "s" : ""}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              {new Date(script.created_at).toLocaleDateString("fr-FR")}
             </span>
           </div>
-        </div>
-        <div className="flex items-center gap-1 text-white/40 text-xs">
-          <GitBranch className="h-3.5 w-3.5" />
-          <span>{script.version_count}v</span>
-        </div>
-      </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs text-white/50">
-          <Code2 className="h-3.5 w-3.5 flex-shrink-0" />
-          <span className="font-mono truncate">{script.gas_script_id}</span>
+          {/* Status */}
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06] flex items-center gap-2">
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+            <span className={`text-xs font-medium ${cfg.text}`}>{cfg.label}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-white/50">
-          <Sheet className="h-3.5 w-3.5 flex-shrink-0" />
-          <span className="font-mono truncate">{script.spreadsheet_id}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-white/40">
-          <Clock className="h-3.5 w-3.5 flex-shrink-0" />
-          <span>{new Date(script.created_at).toLocaleDateString("fr-FR")}</span>
-        </div>
-      </div>
+      </Link>
+
+      {/* Edit button */}
+      <button
+        onClick={(e) => { e.preventDefault(); onEdit(); }}
+        className="absolute top-4 right-10 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 dark:text-white/30 hover:text-extia-night dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
+        title="Modifier"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
     </div>
-    </Link>
   );
 }

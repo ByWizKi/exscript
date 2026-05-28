@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from openai import AsyncOpenAI
-from .base import LLMProvider, LLMMessage
+
+from .base import LLMMessage, LLMProvider
 
 
 class OpenAIProvider(LLMProvider):

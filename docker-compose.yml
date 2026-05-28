@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: exscript
       POSTGRES_DB: exscript
     ports:
-      - "5434:5432"
+      - "5435:5432"
     volumes:
       - exscript_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,7 +16,9 @@ services:
       retries: 5
 
   api:
-    build: ./backend
+    build:
+      context: ./backend
+      target: development
     ports:
       - "8011:8011"
     env_file: .env
@@ -30,18 +32,21 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8011 --reload
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: development
     ports:
       - "3011:3011"
     env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8011
+      PORT: 3011
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     depends_on:
       - api
-    environment:
-      PORT: 3011
 
 volumes:
   exscript_pgdata:

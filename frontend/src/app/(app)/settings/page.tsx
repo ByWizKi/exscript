@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { Save, Loader2 } from "lucide-react";
+import { apiFetch } from "@/lib/apiFetch";
 
 const PROVIDERS = [
   { value: "openai",    label: "OpenAI",              placeholder: "sk-..." },
@@ -31,7 +32,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!session?.backendToken) return;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/settings/llm`, {
+    apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/settings/llm`, {
       headers: { Authorization: `Bearer ${session.backendToken}` },
     })
       .then((r) => r.json())
@@ -54,7 +55,7 @@ export default function SettingsPage() {
     setError(null);
     setSaved(false);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/settings/llm`, {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/settings/llm`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -81,7 +82,7 @@ export default function SettingsPage() {
   const currentProvider = PROVIDERS.find((p) => p.value === provider);
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-2xl mx-auto overflow-y-auto scrollbar-thin flex-1">
       <div className="mb-8">
         <h1 className="font-heading font-black text-2xl text-extia-night dark:text-white">
           Paramètres <span className="text-extia-yellow">LLM</span>
@@ -91,7 +92,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 space-y-5">
+      <div className="card rounded-2xl p-6 space-y-5">
         {/* Provider */}
         <div>
           <label className="block text-slate-600 dark:text-white/70 text-xs font-medium mb-2">

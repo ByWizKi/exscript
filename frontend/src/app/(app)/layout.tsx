@@ -101,7 +101,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
 
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-hidden flex flex-col">
           {children}
         </main>
       </div>

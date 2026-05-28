@@ -65,7 +65,7 @@ export function Sidebar({
         }`}
       >
         {/* Top — Logo + collapse */}
-        <div className={`border-b border-white/10 px-3 py-4 flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
+        <div className={`border-b border-white/10 px-3 h-[58px] flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
           {!collapsed && (
             <Link href="/" className="font-heading font-extrabold text-lg leading-none">
               <span className="text-extia-yellow">Ex</span><span className="text-white">Script</span>
@@ -83,7 +83,7 @@ export function Sidebar({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-2 px-2">
+        <nav className="flex-1 overflow-y-auto scrollbar-thin py-2 px-2">
           <div className="flex flex-col gap-1">
             {navItems.map(({ href, label, icon }) => (
               <NavItem

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Pre-commit hook — tourne dans Docker (Python 3.12, aligné prod).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if ! docker info >/dev/null 2>&1; then
+    echo "❌ Docker n'est pas accessible. Démarre Docker Desktop."
+    exit 1
+fi
+
+# ── Vérification identité git ─────────────────────────────────────────────
+GIT_NAME=$(git config user.name 2>/dev/null || echo "")
+GIT_EMAIL=$(git config user.email 2>/dev/null || echo "")
+
+if [[ -z "$GIT_NAME" || -z "$GIT_EMAIL" ]]; then
+    echo "❌ Identité git non configurée. Lance :"
+    echo "   git config --local user.name \"THIEBAUD Enzo\""
+    echo "   git config --local user.email \"ethiebaud@extia-inge.fr\""
+    exit 1
+fi
+
+ALLOWED_EMAILS="ethiebaud@extia-inge.fr enzoth39260@gmail.com noreply@anthropic.com"
+EMAIL_OK=false
+for ALLOWED in $ALLOWED_EMAILS; do
+    [[ "$GIT_EMAIL" == "$ALLOWED" ]] && EMAIL_OK=true && break
+done
+
+if [[ "$EMAIL_OK" == "false" ]]; then
+    echo "❌ Email git non autorisé : $GIT_EMAIL"
+    echo "   Emails autorisés : $ALLOWED_EMAILS"
+    exit 1
+fi
+
+echo "✅ Identité git : $GIT_NAME <$GIT_EMAIL>"
+echo "🐳 Pre-commit checks (Docker)..."
+
+STAGED_PY_RAW=$(git diff --cached --name-only --diff-filter=ACM | grep '^backend/.*\.py$' || true)
+STAGED_PY=$(echo "$STAGED_PY_RAW" | sed 's|^backend/||' | tr '\n' ' ' | xargs)
+
+STAGED_TS_RAW=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx)$' | sed 's|^frontend/||' || true)
+
+if [[ -n "$STAGED_PY" ]]; then
+    echo "🐍 Ruff format check..."
+    bash "$ROOT/scripts/docker-run.sh" ruff format --check $STAGED_PY
+
+    echo "🐍 Ruff lint..."
+    bash "$ROOT/scripts/docker-run.sh" ruff check $STAGED_PY
+fi
+
+if [[ -n "$STAGED_TS_RAW" ]]; then
+    echo "📘 ESLint..."
+    QUOTED_TS=$(echo "$STAGED_TS_RAW" | sed "s/.*/'&'/g" | tr '\n' ' ')
+    bash "$ROOT/scripts/docker-run.sh" bash -c "cd /frontend && npx eslint $QUOTED_TS"
+fi
+
+echo "✅ Pre-commit OK"

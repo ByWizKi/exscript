@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from anthropic import AsyncAnthropic
-from .base import LLMProvider, LLMMessage
+
+from .base import LLMMessage, LLMProvider
 
 
 class AnthropicProvider(LLMProvider):
@@ -11,12 +13,12 @@ class AnthropicProvider(LLMProvider):
     async def complete(self, messages: list[LLMMessage]) -> str:
         system = next((m.content for m in messages if m.role == "system"), "")
         user_messages = [
-            {"role": m.role, "content": m.content}
-            for m in messages if m.role != "system"
+            {"role": m.role, "content": m.content} for m in messages if m.role != "system"
         ]
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=8192,
+            temperature=0,
             system=system,
             messages=user_messages,
         )

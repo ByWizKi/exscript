@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Pre-push hook — validations complètes avant push.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if ! docker info >/dev/null 2>&1; then
+    echo "❌ Docker n'est pas accessible. Démarre Docker Desktop."
+    exit 1
+fi
+
+echo ""
+echo "╔════════════════════════════════════════════════════════╗"
+echo "║  🐳 Pre-push validation (Docker — Python 3.12)         ║"
+echo "╚════════════════════════════════════════════════════════╝"
+echo ""
+
+RUN="bash $ROOT/scripts/docker-run.sh"
+
+echo "🔍 [1/6] Lint complet backend..."
+$RUN ruff check .
+$RUN ruff format --check .
+
+echo ""
+echo "🔍 [2/6] Lint + TypeScript frontend..."
+# Run natively: node_modules are macOS binaries (not Linux), Docker would fail to load SWC
+(cd "$ROOT/frontend" && npm run lint)
+(cd "$ROOT/frontend" && npx tsc --noEmit)
+
+echo ""
+echo "🔍 [3/6] Validate env + lockfiles..."
+$RUN python3 scripts/validate_env.py --ci
+bash "$ROOT/scripts/lock_check.sh"
+
+echo ""
+echo "🔍 [4/6] Validate migrations..."
+$RUN python3 scripts/validate_migrations.py
+$RUN python3 scripts/check_migration_safety.py
+
+echo ""
+echo "🔍 [5/6] Tests backend..."
+$RUN pytest tests/ -x --tb=short -q
+
+echo ""
+echo "🔍 [6/6] Tests frontend + build prod Docker..."
+# Run natively: same reason as step 2
+(cd "$ROOT/frontend" && npm test -- --watchAll=false --passWithNoTests)
+bash "$ROOT/scripts/test_prod_build.sh"
+bash "$ROOT/scripts/test_prod_build_frontend.sh"
+
+echo ""
+echo "╔════════════════════════════════════════════════════════╗"
+echo "║  ✅ Pre-push OK — push autorisé                        ║"
+echo "╚════════════════════════════════════════════════════════╝"
+echo ""

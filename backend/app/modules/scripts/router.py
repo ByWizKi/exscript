@@ -1,75 +1,143 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.deps import get_current_email
 from app.db.session import get_db
-from app.core.security import decode_access_token
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from .schemas import ScriptCreate, ScriptOut, ScriptListItem, AIModifyRequest, AIModifyResponse, VersionCreate
-from .service import create_script, list_scripts, get_script, ai_modify_script, add_version
+
+from .schemas import (
+    AIModifyRequest,
+    AIModifyResponse,
+    PushRequest,
+    ScriptCreate,
+    ScriptListItem,
+    ScriptOut,
+    ScriptUpdate,
+    VersionCreate,
+)
+from .service import (
+    add_version_to_script,
+    apply_ai_modification,
+    create_script_and_fetch,
+    delete_script_by_id,
+    get_script_or_none,
+    list_all_scripts,
+    sync_pull,
+    sync_push,
+    update_script_fields,
+)
 
 router = APIRouter()
-bearer = HTTPBearer(auto_error=False)
-
-
-def get_current_email(credentials: HTTPAuthorizationCredentials = Depends(bearer)) -> str:
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Non authentifié")
-    payload = decode_access_token(credentials.credentials)
-    return payload["sub"]
 
 
 @router.get("", response_model=list[ScriptListItem])
 async def list_scripts_endpoint(
-    db: AsyncSession = Depends(get_db),
-    email: str = Depends(get_current_email),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
 ):
-    return await list_scripts(db)
+    return await list_all_scripts(db)
 
 
 @router.post("", response_model=ScriptOut, status_code=201)
 async def create_script_endpoint(
     body: ScriptCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
     email: str = Depends(get_current_email),
 ):
-    script = await create_script(body, email, db)
-    return await get_script(script.id, db)
+    return await create_script_and_fetch(body, email, db)
 
 
 @router.get("/{script_id}", response_model=ScriptOut)
 async def get_script_endpoint(
     script_id: int,
-    db: AsyncSession = Depends(get_db),
-    email: str = Depends(get_current_email),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
 ):
-    script = await get_script(script_id, db)
+    script = await get_script_or_none(script_id, db)
     if not script:
         raise HTTPException(status_code=404, detail="Script non trouvé")
     return script
+
+
+@router.put("/{script_id}", response_model=ScriptOut)
+async def update_script_endpoint(
+    script_id: int,
+    body: ScriptUpdate,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    script = await update_script_fields(script_id, body, db)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script non trouvé")
+    return script
+
+
+@router.delete("/{script_id}", status_code=204)
+async def delete_script_endpoint(
+    script_id: int,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    deleted = await delete_script_by_id(script_id, db)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Script non trouvé")
 
 
 @router.post("/{script_id}/ai-modify", response_model=AIModifyResponse)
 async def ai_modify_endpoint(
     script_id: int,
     body: AIModifyRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    try:
+        return await apply_ai_modification(
+            script_id, body.prompt, db, body.google_access_token, body.history
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
+
+@router.post("/{script_id}/pull", response_model=ScriptOut)
+async def pull_from_gas_endpoint(
+    script_id: int,
+    body: PushRequest,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
     email: str = Depends(get_current_email),
 ):
     try:
-        result = await ai_modify_script(script_id, body.prompt, db)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return await sync_pull(script_id, body.access_token, email, db)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    except Exception as err:
+        raise HTTPException(status_code=502, detail=str(err)) from err
+
+
+@router.post("/{script_id}/push")
+async def push_to_gas_endpoint(
+    script_id: int,
+    body: PushRequest,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    try:
+        await sync_push(script_id, body.access_token, db)
+        return {"success": True}
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    except Exception as err:
+        raise HTTPException(status_code=502, detail=str(err)) from err
 
 
 @router.post("/{script_id}/versions", response_model=ScriptOut, status_code=201)
 async def add_version_endpoint(
     script_id: int,
     body: VersionCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
     email: str = Depends(get_current_email),
 ):
     try:
-        script = await add_version(script_id, body.files, body.message, email, db)
-        return script
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return await add_version_to_script(script_id, body.files, body.message, email, db)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err

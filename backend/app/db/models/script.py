@@ -1,12 +1,16 @@
 from __future__ import annotations
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Enum as SAEnum
+
+from datetime import UTC, datetime
+from enum import StrEnum
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from datetime import datetime, timezone
-import enum
+
 from app.db.session import Base
 
 
-class ScriptStatus(str, enum.Enum):
+class ScriptStatus(StrEnum):
     draft = "draft"
     tested = "tested"
     deployed = "deployed"
@@ -21,12 +25,18 @@ class Script(Base):
     spreadsheet_id: Mapped[str] = mapped_column(String(255))
     owner_email: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     versions: Mapped[list[ScriptVersion]] = relationship(
-        back_populates="script", cascade="all, delete-orphan", order_by="ScriptVersion.version_number"
+        back_populates="script",
+        cascade="all, delete-orphan",
+        order_by="ScriptVersion.version_number",
     )
+
+    @property
+    def latest_version(self) -> ScriptVersion | None:
+        return self.versions[-1] if self.versions else None
 
 
 class ScriptVersion(Base):
@@ -39,7 +49,7 @@ class ScriptVersion(Base):
     status: Mapped[ScriptStatus] = mapped_column(SAEnum(ScriptStatus), default=ScriptStatus.draft)
     created_by: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
     script: Mapped[Script] = relationship(back_populates="versions")
