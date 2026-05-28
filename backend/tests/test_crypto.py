@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
-from app.core.crypto import encrypt, decrypt
+from app.core.crypto import decrypt, encrypt
 
 
 def test_encrypt_decrypt_roundtrip():

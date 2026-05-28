@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.llm.factory import get_provider
-from app.llm.openai_provider import OpenAIProvider
 from app.llm.anthropic_provider import AnthropicProvider
+from app.llm.factory import get_provider
 from app.llm.gemini_provider import GeminiProvider
+from app.llm.openai_provider import OpenAIProvider
 
 
 def test_get_provider_openai():

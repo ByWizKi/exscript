@@ -13,9 +13,7 @@ async def test_create_script(db):
         gas_script_id="abc123",
         spreadsheet_id="sheet456",
         files=[
-            ScriptFileIn(
-                filename="Code.js", content="function test() {}", file_type="server_js"
-            )
+            ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js")
         ],
     )
     script = await create_script(data, "test@example.com", db)

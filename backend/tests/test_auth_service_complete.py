@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.service import authenticate_google
-from app.db.models.user import User
-from sqlalchemy import select
 
 
 @pytest.mark.asyncio
