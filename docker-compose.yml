@@ -24,8 +24,10 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://exscript:exscript@db:5432/exscript
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/adc.json
     volumes:
       - ./backend:/app
+      - ~/.config/gcloud/application_default_credentials.json:/tmp/adc.json:ro
     depends_on:
       db:
         condition: service_healthy
