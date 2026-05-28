@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     allowed_domain: str = "extia-inge.fr"
     encryption_key: str = ""
     vertex_project_id: str = "exscript"
-    vertex_location: str = "europe-west1"
+    vertex_location: str = "us-central1"
 
     @field_validator("jwt_secret")
     @classmethod

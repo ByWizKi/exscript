@@ -69,7 +69,7 @@ export default function SettingsPage() {
           <input
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder="gemini-2.0-flash"
+            placeholder="gemini-2.5-flash"
             className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-extia-night dark:text-white placeholder-slate-400 dark:placeholder-white/25 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-extia-yellow transition-colors"
           />
           <p className="text-slate-400 dark:text-white/30 text-xs mt-1.5">

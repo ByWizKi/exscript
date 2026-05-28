@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .crud import get_setting, set_setting
 from .schemas import LLMSettingsIn, LLMSettingsOut
 
-_DEFAULT_MODEL = "gemini-2.0-flash"
+_DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 async def get_llm_settings(db: AsyncSession) -> LLMSettingsOut:
