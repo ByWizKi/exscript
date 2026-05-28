@@ -59,5 +59,5 @@ def test_get_provider_unknown_case_insensitive():
 
 
 def test_get_provider_supported_list():
-    with pytest.raises(ValueError, match="Supported: openai, anthropic, gemini, ollama"):
+    with pytest.raises(ValueError, match="Supported: openai, anthropic, gemini, vertex, ollama"):
         get_provider("invalid", "model", "key")
