@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from app.modules.scripts.ai import _fetch_sheets_context, ai_modify_script
-from app.modules.scripts.schemas import ScriptCreate, ScriptFileIn
-from app.modules.scripts.crud import create_script
+
 from app.llm.base import LLMMessage
+from app.modules.scripts.ai import _fetch_sheets_context, ai_modify_script
+from app.modules.scripts.crud import create_script
+from app.modules.scripts.schemas import ScriptCreate, ScriptFileIn
 
 
 @pytest.mark.asyncio
 async def test_fetch_sheets_context_success():
-    with patch('httpx.AsyncClient') as mock_client_class:
+    with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_response = MagicMock()
         mock_response.is_success = True
@@ -22,19 +24,23 @@ async def test_fetch_sheets_context_success():
                     "data": [
                         {
                             "rowData": [
-                                {"values": [
-                                    {"formattedValue": "Header1"},
-                                    {"formattedValue": "Header2"},
-                                ]},
-                                {"values": [
-                                    {"formattedValue": "Value1"},
-                                    {"formattedValue": "Value2"},
-                                ]},
+                                {
+                                    "values": [
+                                        {"formattedValue": "Header1"},
+                                        {"formattedValue": "Header2"},
+                                    ]
+                                },
+                                {
+                                    "values": [
+                                        {"formattedValue": "Value1"},
+                                        {"formattedValue": "Value2"},
+                                    ]
+                                },
                             ]
                         }
-                    ]
+                    ],
                 }
-            ]
+            ],
         }
 
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -51,7 +57,7 @@ async def test_fetch_sheets_context_success():
 
 @pytest.mark.asyncio
 async def test_fetch_sheets_context_api_error():
-    with patch('httpx.AsyncClient') as mock_client_class:
+    with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_response = MagicMock()
         mock_response.is_success = False
@@ -67,14 +73,11 @@ async def test_fetch_sheets_context_api_error():
 
 @pytest.mark.asyncio
 async def test_fetch_sheets_context_empty_sheets():
-    with patch('httpx.AsyncClient') as mock_client_class:
+    with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_response = MagicMock()
         mock_response.is_success = True
-        mock_response.json.return_value = {
-            "properties": {"title": "Empty Sheet"},
-            "sheets": []
-        }
+        mock_response.json.return_value = {"properties": {"title": "Empty Sheet"}, "sheets": []}
 
         mock_client.get = AsyncMock(return_value=mock_response)
         mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -88,7 +91,7 @@ async def test_fetch_sheets_context_empty_sheets():
 
 @pytest.mark.asyncio
 async def test_fetch_sheets_context_with_empty_cells():
-    with patch('httpx.AsyncClient') as mock_client_class:
+    with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_response = MagicMock()
         mock_response.is_success = True
@@ -100,21 +103,25 @@ async def test_fetch_sheets_context_with_empty_cells():
                     "data": [
                         {
                             "rowData": [
-                                {"values": [
-                                    {"formattedValue": "A"},
-                                    {"formattedValue": "B"},
-                                    {},
-                                ]},
-                                {"values": [
-                                    {"formattedValue": "1"},
-                                    {},
-                                ]},
+                                {
+                                    "values": [
+                                        {"formattedValue": "A"},
+                                        {"formattedValue": "B"},
+                                        {},
+                                    ]
+                                },
+                                {
+                                    "values": [
+                                        {"formattedValue": "1"},
+                                        {},
+                                    ]
+                                },
                                 {"values": []},
                             ]
                         }
-                    ]
+                    ],
                 }
-            ]
+            ],
         }
 
         mock_client.get = AsyncMock(return_value=mock_response)
@@ -161,18 +168,23 @@ async def test_ai_modify_script_success(db):
         name="Test Script",
         gas_script_id="test_id",
         spreadsheet_id="sheet123",
-        files=[ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js")],
+        files=[
+            ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js"),
+        ],
     )
     script = await create_script(data, "test@example.com", db)
 
-    with patch('app.modules.scripts.ai._fetch_sheets_context') as mock_fetch_sheets:
+    with patch("app.modules.scripts.ai._fetch_sheets_context") as mock_fetch_sheets:
         mock_fetch_sheets.return_value = ""
 
-        with patch('app.modules.settings.service.get_provider_instance') as mock_get_provider:
+        with patch("app.modules.settings.service.get_provider_instance") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_get_provider.return_value = mock_provider
 
-            json_response = '{"files": [{"filename": "Code.js", "content": "modified", "file_type": "server_js"}], "version_message": "Added console.log"}'
+            json_response = (
+                '{"files": [{"filename": "Code.js", "content": "modified",'
+                ' "file_type": "server_js"}], "version_message": "Added console.log"}'
+            )
             mock_provider.complete = AsyncMock(return_value=json_response)
 
             result = await ai_modify_script(
@@ -192,18 +204,23 @@ async def test_ai_modify_script_with_sheets_context(db):
         name="Test Script",
         gas_script_id="test_id",
         spreadsheet_id="sheet123",
-        files=[ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js")],
+        files=[
+            ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js"),
+        ],
     )
     script = await create_script(data, "test@example.com", db)
 
-    with patch('app.modules.scripts.ai._fetch_sheets_context') as mock_fetch_sheets:
+    with patch("app.modules.scripts.ai._fetch_sheets_context") as mock_fetch_sheets:
         mock_fetch_sheets.return_value = "Spreadsheet: My Data"
 
-        with patch('app.modules.settings.service.get_provider_instance') as mock_get_provider:
+        with patch("app.modules.settings.service.get_provider_instance") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_get_provider.return_value = mock_provider
 
-            json_response = '{"files": [{"filename": "Code.js", "content": "modified", "file_type": "server_js"}], "version_message": "Modified"}'
+            json_response = (
+                '{"files": [{"filename": "Code.js", "content": "modified",'
+                ' "file_type": "server_js"}], "version_message": "Modified"}'
+            )
             mock_provider.complete = AsyncMock(return_value=json_response)
 
             result = await ai_modify_script(
@@ -223,14 +240,16 @@ async def test_ai_modify_script_invalid_json(db):
         name="Test Script",
         gas_script_id="test_id",
         spreadsheet_id="sheet123",
-        files=[ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js")],
+        files=[
+            ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js"),
+        ],
     )
     script = await create_script(data, "test@example.com", db)
 
-    with patch('app.modules.scripts.ai._fetch_sheets_context') as mock_fetch_sheets:
+    with patch("app.modules.scripts.ai._fetch_sheets_context") as mock_fetch_sheets:
         mock_fetch_sheets.return_value = ""
 
-        with patch('app.modules.settings.service.get_provider_instance') as mock_get_provider:
+        with patch("app.modules.settings.service.get_provider_instance") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_get_provider.return_value = mock_provider
 
@@ -250,18 +269,23 @@ async def test_ai_modify_script_with_history(db):
         name="Test Script",
         gas_script_id="test_id",
         spreadsheet_id="sheet123",
-        files=[ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js")],
+        files=[
+            ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js"),
+        ],
     )
     script = await create_script(data, "test@example.com", db)
 
-    with patch('app.modules.scripts.ai._fetch_sheets_context') as mock_fetch_sheets:
+    with patch("app.modules.scripts.ai._fetch_sheets_context") as mock_fetch_sheets:
         mock_fetch_sheets.return_value = ""
 
-        with patch('app.modules.settings.service.get_provider_instance') as mock_get_provider:
+        with patch("app.modules.settings.service.get_provider_instance") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_get_provider.return_value = mock_provider
 
-            json_response = '{"files": [{"filename": "Code.js", "content": "modified", "file_type": "server_js"}], "version_message": "Updated"}'
+            json_response = (
+                '{"files": [{"filename": "Code.js", "content": "modified",'
+                ' "file_type": "server_js"}], "version_message": "Updated"}'
+            )
             mock_provider.complete = AsyncMock(return_value=json_response)
 
             history = [
@@ -269,7 +293,7 @@ async def test_ai_modify_script_with_history(db):
                 LLMMessage(role="assistant", content="First response"),
             ]
 
-            result = await ai_modify_script(
+            await ai_modify_script(
                 script_id=script.id,
                 prompt="Second request",
                 db=db,

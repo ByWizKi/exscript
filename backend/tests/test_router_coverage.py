@@ -3,8 +3,6 @@ from __future__ import annotations
 import pytest
 
 from app.core.security import create_access_token
-from app.modules.scripts.crud import create_script
-from app.modules.scripts.schemas import ScriptCreate, ScriptFileIn
 
 
 def auth_headers(email: str = "test@example.com") -> dict:
@@ -20,9 +18,7 @@ async def test_ai_modify_endpoint_missing_script(client):
         "google_access_token": None,
         "history": [],
     }
-    response = await client.post(
-        "/scripts/99999/ai-modify", json=payload, headers=auth_headers()
-    )
+    response = await client.post("/scripts/99999/ai-modify", json=payload, headers=auth_headers())
     assert response.status_code == 400
     data = response.json()
     assert "detail" in data
@@ -42,11 +38,6 @@ async def test_valid_token_gets_scripts(client):
     response = await client.get("/scripts", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert isinstance(response.json(), list)
-
-
-def create_access_token(data: dict) -> str:
-    from app.core.security import create_access_token as create_token
-    return create_token(data)
 
 
 @pytest.mark.asyncio

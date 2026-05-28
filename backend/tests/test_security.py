@@ -19,14 +19,14 @@ def test_token_contains_expiry():
 
 
 def test_invalid_token_raises():
-    with pytest.raises(Exception):
+    with pytest.raises(JWTError):
         decode_access_token("invalid.token.here")
 
 
 def test_tampered_token_raises():
     token = create_access_token({"sub": "user@test.com"})
     tampered = token[:-5] + "XXXXX"
-    with pytest.raises(Exception):
+    with pytest.raises(JWTError):
         decode_access_token(tampered)
 
 

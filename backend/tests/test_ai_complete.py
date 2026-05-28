@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.modules.scripts.schemas import ScriptCreate, ScriptFileIn
-from app.modules.scripts.crud import create_script
 from app.core.security import create_access_token
+from app.modules.scripts.crud import create_script
+from app.modules.scripts.schemas import ScriptCreate, ScriptFileIn
 
 
 def auth_headers(email: str = "test@example.com") -> dict:
@@ -19,7 +19,9 @@ async def test_ai_modify_endpoint_success(client, db):
         name="Test Script",
         gas_script_id="test_id_123",
         spreadsheet_id="sheet123",
-        files=[ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js")],
+        files=[
+            ScriptFileIn(filename="Code.js", content="function test() {}", file_type="server_js"),
+        ],
     )
     script = await create_script(data, "test@example.com", db)
 
@@ -43,8 +45,6 @@ async def test_ai_modify_with_invalid_script_id(client):
         "google_access_token": None,
         "history": [],
     }
-    response = await client.post(
-        "/scripts/99999/ai-modify", json=payload, headers=auth_headers()
-    )
+    response = await client.post("/scripts/99999/ai-modify", json=payload, headers=auth_headers())
     assert response.status_code == 400
     assert "detail" in response.json()

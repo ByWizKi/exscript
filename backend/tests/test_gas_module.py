@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from app.modules.scripts.crud import create_script
 from app.modules.scripts.gas import FILE_TYPE_TO_GAS, push_to_gas
 from app.modules.scripts.schemas import ScriptCreate, ScriptFileIn
-from app.modules.scripts.crud import create_script
 
 
 def test_file_type_to_gas_mapping():
@@ -32,7 +32,7 @@ async def test_push_to_gas_with_invalid_token(db):
     script = await create_script(data, "test@example.com", db)
 
     # Try to push with invalid token
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017 — gas.py raises bare Exception from Google API errors
         # This will fail because we don't have a real Google token
         # But it should raise an exception (not ValueError about missing script)
         await push_to_gas(script.id, "invalid_token_xyz", db)

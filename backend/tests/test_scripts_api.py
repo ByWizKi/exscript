@@ -31,7 +31,9 @@ async def test_create_script_via_api(client):
         "name": "API Test Script",
         "gas_script_id": "api_test_123",
         "spreadsheet_id": "sheet_api_123",
-        "files": [{"filename": "Code.js", "content": "function run() {}", "file_type": "server_js"}],
+        "files": [
+            {"filename": "Code.js", "content": "function run() {}", "file_type": "server_js"},
+        ],
         "version_message": "Initial",
     }
     response = await client.post("/scripts", json=payload, headers=auth_headers())

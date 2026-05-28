@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 
 from app.llm.anthropic_provider import AnthropicProvider
-from app.llm.openai_provider import OpenAIProvider
-from app.llm.gemini_provider import GeminiProvider
 from app.llm.base import LLMMessage
+from app.llm.gemini_provider import GeminiProvider
+from app.llm.openai_provider import OpenAIProvider
 
 
 class TestAnthropicProvider:
@@ -20,7 +21,9 @@ class TestAnthropicProvider:
         provider = AnthropicProvider(api_key="test_key", model="claude-3-opus")
 
         # Mock the async client
-        with patch.object(provider._client.messages, 'create', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            provider._client.messages, "create", new_callable=AsyncMock
+        ) as mock_create:
             # Create a mock response
             mock_response = Mock()
             mock_response.content = [Mock(text="Generated response")]
@@ -44,7 +47,9 @@ class TestAnthropicProvider:
     async def test_complete_without_system_message(self):
         provider = AnthropicProvider(api_key="test_key", model="claude-3-opus")
 
-        with patch.object(provider._client.messages, 'create', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            provider._client.messages, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_response = Mock()
             mock_response.content = [Mock(text="Response without system")]
             mock_create.return_value = mock_response
@@ -69,9 +74,7 @@ class TestOpenAIProvider:
 
     def test_init_with_base_url(self):
         provider = OpenAIProvider(
-            api_key="test_key",
-            model="gpt-4",
-            base_url="http://localhost:8000/v1"
+            api_key="test_key", model="gpt-4", base_url="http://localhost:8000/v1"
         )
         assert provider._model == "gpt-4"
 
@@ -79,7 +82,9 @@ class TestOpenAIProvider:
     async def test_complete_with_messages(self):
         provider = OpenAIProvider(api_key="test_key", model="gpt-4")
 
-        with patch.object(provider._client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            provider._client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_response = Mock()
             mock_response.choices = [Mock(message=Mock(content="OpenAI response"))]
             mock_create.return_value = mock_response
@@ -98,7 +103,9 @@ class TestOpenAIProvider:
     async def test_complete_with_null_content(self):
         provider = OpenAIProvider(api_key="test_key", model="gpt-4")
 
-        with patch.object(provider._client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            provider._client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_response = Mock()
             mock_response.choices = [Mock(message=Mock(content=None))]
             mock_create.return_value = mock_response
@@ -111,7 +118,7 @@ class TestOpenAIProvider:
 
 
 class TestGeminiProvider:
-    @patch('app.llm.gemini_provider.genai')
+    @patch("app.llm.gemini_provider.genai")
     def test_init(self, mock_genai):
         mock_genai.GenerativeModel = Mock(return_value=Mock())
         provider = GeminiProvider(api_key="test_key", model="gemini-pro")
@@ -119,7 +126,7 @@ class TestGeminiProvider:
         mock_genai.configure.assert_called_once_with(api_key="test_key")
         assert provider._model is not None
 
-    @patch('app.llm.gemini_provider.genai')
+    @patch("app.llm.gemini_provider.genai")
     @pytest.mark.asyncio
     async def test_complete_with_system_and_user(self, mock_genai):
         mock_model = AsyncMock()
