@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Loader2, Sheet, AlertCircle, Search, CheckCircle } from "lucide-react";
 import { fetchSheets, fetchGasFiles, type DriveSheet } from "@/hooks/useGoogleApis";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface Props {
   token: string;
@@ -90,7 +91,7 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
         file_type: typeToFileType(f.type),
       }));
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/scripts`, {
+      const res = await apiFetch(`${process.env.NEXT_PUBLIC_API_URL}/scripts`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -118,24 +119,24 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-[#0d1b3e] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-lg bg-white dark:bg-[#0d1b3e] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
-          <h2 className="font-heading font-black text-white text-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-white/10 flex-shrink-0">
+          <h2 className="font-heading font-black text-extia-night dark:text-white text-lg">
             Importer depuis <span className="text-extia-yellow">Google Drive</span>
           </h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 dark:text-white/50 hover:text-extia-night dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-5 space-y-4">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <Loader2 className="h-6 w-6 animate-spin text-extia-yellow" />
-              <p className="text-white/40 text-sm">Chargement des Google Sheets…</p>
+              <p className="text-slate-400 dark:text-white/40 text-sm">Chargement des Google Sheets…</p>
             </div>
           ) : loadError ? (
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3 flex items-start gap-2">
@@ -145,19 +146,19 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
             <>
               {/* Search */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/30" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-white/30" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Rechercher un Google Sheet…"
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder-white/25 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
+                  className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-extia-night dark:text-white placeholder-slate-400 dark:placeholder-white/25 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
                 />
               </div>
 
               {/* Sheet list */}
               <div>
-                <p className="text-white/40 text-xs mb-2">{filtered.length} sheets trouvés</p>
-                <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                <p className="text-slate-400 dark:text-white/40 text-xs mb-2">{filtered.length} sheets trouvés</p>
+                <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin pr-1">
                   {filtered.map((s) => {
                     const isSelected = selectedSheet?.id === s.id;
                     return (
@@ -167,11 +168,11 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
                         className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-colors border ${
                           isSelected
                             ? "bg-extia-yellow/15 border-extia-yellow/30"
-                            : "bg-white/5 border-transparent hover:bg-white/8"
+                            : "bg-slate-50 dark:bg-white/5 border-transparent hover:bg-slate-100 dark:hover:bg-white/8"
                         }`}
                       >
-                        <Sheet className={`h-4 w-4 flex-shrink-0 ${isSelected ? "text-extia-yellow" : "text-white/35"}`} />
-                        <span className={`text-sm truncate ${isSelected ? "text-extia-yellow" : "text-white/70"}`}>{s.name}</span>
+                        <Sheet className={`h-4 w-4 flex-shrink-0 ${isSelected ? "text-extia-yellow" : "text-slate-400 dark:text-white/35"}`} />
+                        <span className={`text-sm truncate ${isSelected ? "text-extia-yellow" : "text-slate-600 dark:text-white/70"}`}>{s.name}</span>
                       </button>
                     );
                   })}
@@ -180,17 +181,17 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
 
               {/* Script URL + name */}
               {selectedSheet && (
-                <div className="space-y-3 border-t border-white/10 pt-4">
+                <div className="space-y-3 border-t border-slate-200 dark:border-white/10 pt-4">
                   <div>
-                    <label className="block text-white/50 text-xs font-medium mb-1.5">
+                    <label className="block text-slate-500 dark:text-white/50 text-xs font-medium mb-1.5">
                       URL ou ID du projet Apps Script <span className="text-red-400">*</span>
                     </label>
                     <input
                       value={scriptUrl}
                       onChange={(e) => handleScriptUrl(e.target.value)}
                       placeholder="https://script.google.com/home/projects/ABC123…"
-                      className={`w-full bg-white/5 border text-white placeholder-white/25 rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-colors ${
-                        scriptId ? "border-green-500/40 focus:border-green-400" : "border-white/10 focus:border-extia-yellow"
+                      className={`w-full bg-slate-50 dark:bg-white/5 border text-extia-night dark:text-white placeholder-slate-400 dark:placeholder-white/25 rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-colors ${
+                        scriptId ? "border-green-500/40 focus:border-green-400" : "border-slate-200 dark:border-white/10 focus:border-extia-yellow"
                       }`}
                     />
                     {scriptId ? (
@@ -198,18 +199,18 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
                         <CheckCircle className="h-3 w-3" /> ID détecté : <span className="font-mono opacity-70">{scriptId.slice(0, 20)}…</span>
                       </p>
                     ) : (
-                      <p className="text-white/25 text-xs mt-1">
+                      <p className="text-slate-400 dark:text-white/25 text-xs mt-1">
                         Google Sheets → Extensions → Apps Script → copie l&apos;URL
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-white/50 text-xs font-medium mb-1.5">Nom du projet dans ExScript</label>
+                    <label className="block text-slate-500 dark:text-white/50 text-xs font-medium mb-1.5">Nom du projet dans ExScript</label>
                     <input
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
+                      className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-extia-night dark:text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-extia-yellow transition-colors"
                     />
                   </div>
                 </div>
@@ -226,8 +227,8 @@ export function AddScriptModal({ token, googleToken, onClose, onSuccess }: Props
 
         {/* Footer */}
         {!loading && !loadError && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 flex-shrink-0">
-            <button onClick={onClose} className="text-white/50 hover:text-white text-sm transition-colors">Annuler</button>
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-white/10 flex-shrink-0">
+            <button onClick={onClose} className="text-slate-500 dark:text-white/50 hover:text-extia-night dark:hover:text-white text-sm transition-colors">Annuler</button>
             <button
               onClick={handleCreate}
               disabled={!canCreate || saving}

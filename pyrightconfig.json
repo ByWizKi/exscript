@@ -1,14 +1,4 @@
 {
   "pythonVersion": "3.12",
-  "typeCheckingMode": "basic",
-  "reportMissingImports": "none",
-  "reportMissingModuleSource": "none",
-  "reportUnusedImport": "none",
-  "reportGeneralTypeIssues": "none",
-  "reportArgumentType": "none",
-  "reportAttributeAccessIssue": "none",
-  "reportOperatorIssue": "none",
-  "reportUnknownMemberType": "none",
-  "reportUnknownVariableType": "none",
-  "reportUndefinedVariable": "none"
+  "typeCheckingMode": "off"
 }

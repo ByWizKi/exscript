@@ -1,0 +1,21 @@
+services:
+  tools:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.tools
+    image: exscript-tools:latest
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - ./frontend:/frontend
+      - tools-cache:/root/.cache
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=sqlite+aiosqlite:///test.db
+
+volumes:
+  tools-cache:

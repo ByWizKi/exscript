@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models.script import Script, ScriptFile, ScriptVersion
 
-from .schemas import ScriptCreate
+from .schemas import ScriptCreate, ScriptUpdate
 
 
 async def create_script(data: ScriptCreate, owner_email: str, db: AsyncSession) -> Script:
@@ -124,3 +124,26 @@ async def add_version(
 
     await db.commit()
     return await get_script(script_id, db)
+
+
+async def update_script(script_id: int, data: ScriptUpdate, db: AsyncSession) -> Script | None:
+    script = await db.get(Script, script_id)
+    if not script:
+        return None
+    if data.name is not None:
+        script.name = data.name
+    if data.gas_script_id is not None:
+        script.gas_script_id = data.gas_script_id
+    if data.spreadsheet_id is not None:
+        script.spreadsheet_id = data.spreadsheet_id
+    await db.commit()
+    return await get_script(script_id, db)
+
+
+async def delete_script(script_id: int, db: AsyncSession) -> bool:
+    script = await db.get(Script, script_id)
+    if not script:
+        return False
+    await db.delete(script)
+    await db.commit()
+    return True

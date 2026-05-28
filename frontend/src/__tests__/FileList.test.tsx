@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { FileList } from '../app/(app)/scripts/[id]/components/FileList';
-import type { ScriptFile, AiResult } from '../app/(app)/scripts/[id]/types';
+import { FileList } from '../app/(app)/scripts/_detail/components/FileList';
+import type { ScriptFile, AiResult } from '../app/(app)/scripts/_detail/types';
 
 // Mock lucide-react icons
 jest.mock('lucide-react', () => ({

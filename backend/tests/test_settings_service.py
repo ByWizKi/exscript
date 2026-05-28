@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.settings.schemas import LLMSettingsIn
 from app.modules.settings.service import (
     get_llm_settings,
-    save_llm_settings,
     get_provider_instance,
-    _get,
-    _set,
+    save_llm_settings,
 )
-from app.modules.settings.schemas import LLMSettingsIn
 
 
 @pytest.mark.asyncio

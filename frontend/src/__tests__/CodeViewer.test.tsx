@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { CodeViewer } from '../app/(app)/scripts/[id]/components/CodeViewer';
-import type { ScriptFile, AiResult } from '../app/(app)/scripts/[id]/types';
+import { CodeViewer } from '../app/(app)/scripts/_detail/components/CodeViewer';
+import type { ScriptFile, AiResult } from '../app/(app)/scripts/_detail/types';
 
 describe('CodeViewer Component', () => {
   const mockFile: ScriptFile = {

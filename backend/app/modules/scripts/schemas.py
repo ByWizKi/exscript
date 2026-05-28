@@ -94,3 +94,9 @@ class VersionCreate(BaseModel):
 
 class PushRequest(BaseModel):
     access_token: str
+
+
+class ScriptUpdate(BaseModel):
+    name: str | None = None
+    gas_script_id: str | None = None
+    spreadsheet_id: str | None = None

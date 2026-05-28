@@ -4,15 +4,17 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Loader2 } from "lucide-react";
-import { TopBar } from "./components/TopBar";
-import { FileList } from "./components/FileList";
-import { CodeViewer } from "./components/CodeViewer";
-import { AiChat } from "./components/AiChat";
+import { apiFetch } from "@/lib/apiFetch";
+import { TopBar } from "../_detail/components/TopBar";
+import { FileList } from "../_detail/components/FileList";
+import { CodeViewer } from "../_detail/components/CodeViewer";
+import { AiChat } from "../_detail/components/AiChat";
+import { CreateVersionModal } from "../_detail/components/CreateVersionModal";
 import type {
   Script,
   AiResult,
   ChatMessage,
-} from "./types";
+} from "../_detail/types";
 
 export default function ScriptDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,21 +24,25 @@ export default function ScriptDetailPage() {
   const [loading, setLoading] = useState(true);
   const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
   const [pendingResult, setPendingResult] = useState<AiResult | null>(null);
+  const [showVersionModal, setShowVersionModal] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [applied, setApplied] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushed, setPushed] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pullError, setPullError] = useState<string | null>(null);
+  const [pulled, setPulled] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const fetchScript = useCallback(async () => {
-    if (!session?.backendToken) return;
+    if (!session?.backendToken) { setLoading(false); return; }
     setLoading(true);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}`,
         {
           headers: { Authorization: `Bearer ${session.backendToken}` },
@@ -88,7 +94,7 @@ export default function ScriptDetailPage() {
           content: m.text,
         }));
 
-      const res = await fetch(
+      const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-modify`,
         {
           method: "POST",
@@ -125,6 +131,7 @@ export default function ScriptDetailPage() {
           result,
         },
       ]);
+      setShowVersionModal(true);
     } catch (e) {
       setMessages((prev: ChatMessage[]) => [
         ...prev,
@@ -140,14 +147,14 @@ export default function ScriptDetailPage() {
     }
   };
 
-  const handleApply = async () => {
+  const handleApply = async (message: string) => {
     if (!pendingResult || !session?.backendToken) return;
 
     setApplying(true);
     setApplyError(null);
 
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/versions`,
         {
           method: "POST",
@@ -157,7 +164,7 @@ export default function ScriptDetailPage() {
           },
           body: JSON.stringify({
             files: pendingResult.files,
-            message: pendingResult.version_message,
+            message,
           }),
         }
       );
@@ -167,6 +174,7 @@ export default function ScriptDetailPage() {
         throw new Error(d.detail ?? "Erreur serveur");
       }
 
+      setShowVersionModal(false);
       setPendingResult(null);
       setApplied(true);
       setTimeout(() => setApplied(false), 3000);
@@ -180,7 +188,7 @@ export default function ScriptDetailPage() {
     }
   };
 
-  const handleApplyAndPush = async () => {
+  const handleApplyAndPush = async (message: string) => {
     if (
       !pendingResult ||
       !session?.backendToken ||
@@ -192,7 +200,7 @@ export default function ScriptDetailPage() {
     setApplyError(null);
 
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/versions`,
         {
           method: "POST",
@@ -202,7 +210,7 @@ export default function ScriptDetailPage() {
           },
           body: JSON.stringify({
             files: pendingResult.files,
-            message: pendingResult.version_message,
+            message,
           }),
         }
       );
@@ -212,6 +220,7 @@ export default function ScriptDetailPage() {
         throw new Error(d.detail ?? "Erreur serveur");
       }
 
+      setShowVersionModal(false);
       setPendingResult(null);
       await fetchScript();
       await handlePush();
@@ -224,6 +233,40 @@ export default function ScriptDetailPage() {
     }
   };
 
+  const handlePull = async () => {
+    if (!session?.googleAccessToken || !session?.backendToken) return;
+
+    setPulling(true);
+    setPullError(null);
+
+    try {
+      const res = await apiFetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/pull`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.backendToken}`,
+          },
+          body: JSON.stringify({ access_token: session.googleAccessToken }),
+        }
+      );
+
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.detail ?? "Erreur pull");
+      }
+
+      setPulled(true);
+      setTimeout(() => setPulled(false), 3000);
+      await fetchScript();
+    } catch (e) {
+      setPullError(e instanceof Error ? e.message : "Erreur inconnue");
+    } finally {
+      setPulling(false);
+    }
+  };
+
   const handlePush = async () => {
     if (!session?.googleAccessToken) return;
 
@@ -231,7 +274,7 @@ export default function ScriptDetailPage() {
     setPushError(null);
 
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/push`,
         {
           method: "POST",
@@ -276,17 +319,16 @@ export default function ScriptDetailPage() {
       <TopBar
         script={script}
         pendingResult={pendingResult}
-        applying={applying}
         applied={applied}
         pushing={pushing}
         pushed={pushed}
-        applyError={applyError}
+        pulling={pulling}
+        pulled={pulled}
         pushError={pushError}
+        pullError={pullError}
         hasGoogleToken={!!session?.googleAccessToken}
-        onCancel={() => setPendingResult(null)}
-        onApply={handleApply}
-        onApplyAndPush={handleApplyAndPush}
         onPush={handlePush}
+        onPull={handlePull}
       />
 
       <div className="flex flex-1 min-h-0">
@@ -316,6 +358,20 @@ export default function ScriptDetailPage() {
           onPromptChange={setPrompt}
         />
       </div>
+
+      {showVersionModal && pendingResult && (
+        <CreateVersionModal
+          result={pendingResult}
+          currentFiles={currentFiles}
+          hasGoogleToken={!!session?.googleAccessToken}
+          applying={applying}
+          error={applyError}
+          onApply={handleApply}
+          onApplyAndPush={handleApplyAndPush}
+          onDiscard={() => { setShowVersionModal(false); setPendingResult(null); }}
+        />
+      )}
     </div>
   );
 }
+

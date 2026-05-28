@@ -1,0 +1,238 @@
+# Cloud Build — ExScript Backend + Frontend
+# Déclenché sur push vers main (configuré via gcp/setup.sh)
+
+substitutions:
+  _REGION: europe-west1
+  _REPO: exscript
+  _SERVICE: exscript
+  _FRONTEND_SERVICE: exscript-frontend
+  _CLOUDSQL_INSTANCE: "exscript:europe-west1:exscript-db"
+
+steps:
+  # ══ PHASE 1 — validations + résolution URLs en parallèle ══════════════════
+
+  # ── 0. Validate secrets exist in Secret Manager ────────────────────────────
+  - id: validate-secrets
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        echo "🔐 Vérification des secrets requis..."
+        REQUIRED="DATABASE_URL JWT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET NEXTAUTH_SECRET ENCRYPTION_KEY"
+        for SECRET in $$REQUIRED; do
+          if ! gcloud secrets versions list $$SECRET --limit=1 >/dev/null 2>&1; then
+            echo "❌ Secret manquant : $$SECRET"
+            exit 1
+          fi
+          echo "   ✅ $$SECRET"
+        done
+        echo "✅ Tous les secrets sont présents"
+
+  # ── 1. Résoudre les URLs backend + frontend (basées sur le numéro de projet) ──
+  - id: resolve-urls
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor: ["-"]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        PROJECT_NUMBER=$$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+        BACKEND_URL="https://${_SERVICE}-$${PROJECT_NUMBER}.${_REGION}.run.app"
+        FRONTEND_URL="https://${_FRONTEND_SERVICE}-$${PROJECT_NUMBER}.${_REGION}.run.app"
+        echo "🔗 Backend  : $$BACKEND_URL"
+        echo "🔗 Frontend : $$FRONTEND_URL"
+        echo "$$BACKEND_URL"  > /workspace/_backend_url
+        echo "$$FRONTEND_URL" > /workspace/_frontend_url
+
+  # ══ PHASE 2 — build backend + frontend en parallèle ═══════════════════════
+
+  # ── 2. Build image backend ─────────────────────────────────────────────────
+  - id: build-backend
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    env:
+      - DOCKER_BUILDKIT=1
+    args:
+      - build
+      - --target=production
+      - --build-arg=BUILDKIT_INLINE_CACHE=1
+      - --cache-from=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
+      - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest
+      - ./backend
+
+  # ── 3. Tests backend avec PostgreSQL ───────────────────────────────────────
+  - id: run-tests
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-backend]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        docker network create testnet
+        docker run -d --name testdb --network testnet \
+          -e POSTGRES_USER=exscript \
+          -e POSTGRES_PASSWORD=exscript \
+          -e POSTGRES_DB=exscript_test \
+          postgres:16-alpine
+        for i in $(seq 1 20); do
+          docker exec testdb pg_isready -U exscript && break
+          sleep 1
+        done
+        docker run --rm \
+          --user root \
+          --network testnet \
+          -e DATABASE_URL=postgresql+asyncpg://exscript:exscript@testdb/exscript_test \
+          -e JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))") \
+          -e GOOGLE_CLIENT_ID=dummy \
+          -e ENCRYPTION_KEY="" \
+          ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA \
+          /bin/bash -c "
+            pip install -q pytest pytest-asyncio pytest-cov httpx &&
+            echo '🗄️  Migrations...' &&
+            alembic upgrade head &&
+            echo '✅ Migrations OK' &&
+            python3 -m pytest -x --tb=short -q
+          "
+        docker rm -f testdb
+        docker network rm testnet
+
+  # ── 4. Push backend vers Artifact Registry ────────────────────────────────
+  - id: push-backend
+    name: gcr.io/cloud-builders/docker
+    waitFor: [run-tests]
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}
+
+  # ── 5. Build image frontend (en parallèle du backend) ─────────────────────
+  - id: build-frontend
+    name: gcr.io/cloud-builders/docker
+    waitFor: [resolve-urls]
+    env:
+      - DOCKER_BUILDKIT=1
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        BACKEND_URL=$$(cat /workspace/_backend_url)
+        docker build \
+          --target=production \
+          --build-arg=NEXT_PUBLIC_API_URL=$$BACKEND_URL \
+          --build-arg=BUILDKIT_INLINE_CACHE=1 \
+          --cache-from=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}:latest \
+          --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}:$SHORT_SHA \
+          --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}:latest \
+          ./frontend
+
+  # ── 6. Push frontend vers Artifact Registry ───────────────────────────────
+  - id: push-frontend
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build-frontend]
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}
+
+  # ══ PHASE 3 — deploy backend + frontend en parallèle ══════════════════════
+
+  # ── 7. Pre-grant IAM ───────────────────────────────────────────────────────
+  - id: grant-iam
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor: [push-backend, push-frontend, validate-secrets]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        gcloud run services add-iam-policy-binding ${_SERVICE} \
+          --region=${_REGION} --member=allUsers --role=roles/run.invoker 2>/dev/null || true
+        gcloud run services add-iam-policy-binding ${_FRONTEND_SERVICE} \
+          --region=${_REGION} --member=allUsers --role=roles/run.invoker 2>/dev/null || true
+
+  # ── 8. Deploy backend vers Cloud Run ──────────────────────────────────────
+  - id: deploy-backend
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor: [grant-iam]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        FRONTEND_URL=$$(cat /workspace/_frontend_url)
+        gcloud run deploy ${_SERVICE} \
+          --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA \
+          --region=${_REGION} \
+          --platform=managed \
+          --allow-unauthenticated \
+          --add-cloudsql-instances=${_CLOUDSQL_INSTANCE} \
+          --service-account=${_SERVICE}-api@$PROJECT_ID.iam.gserviceaccount.com \
+          --update-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest \
+          --timeout=3600 \
+          --set-env-vars=ENVIRONMENT=production,CORS_ORIGINS=$$FRONTEND_URL
+
+  # ── 9. Deploy frontend vers Cloud Run ─────────────────────────────────────
+  - id: deploy-frontend
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor: [grant-iam]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        FRONTEND_URL=$$(cat /workspace/_frontend_url)
+        gcloud run deploy ${_FRONTEND_SERVICE} \
+          --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}:$SHORT_SHA \
+          --region=${_REGION} \
+          --platform=managed \
+          --allow-unauthenticated \
+          --port=3000 \
+          --update-secrets=NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest \
+          --set-env-vars=NODE_ENV=production,NEXTAUTH_URL=$$FRONTEND_URL
+
+  # ── 10. Smoke test backend + rollback automatique ─────────────────────────
+  - id: smoke-test
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor: [deploy-backend]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        echo "🧪 Smoke tests..."
+        SERVICE_URL=$$(gcloud run services describe ${_SERVICE} --region=${_REGION} --format='value(status.url)')
+        smoke_failed=0
+
+        echo "Testing $$SERVICE_URL/health..."
+        if curl -sf --max-time 15 "$$SERVICE_URL/health" | grep -q '"ok"'; then
+          echo "✅ Health check OK"
+        else
+          echo "❌ Health check failed"
+          smoke_failed=1
+        fi
+
+        if [ "$$smoke_failed" -eq 1 ]; then
+          echo "🔄 Rollback vers la révision précédente..."
+          PREVIOUS=$$(gcloud run revisions list \
+            --service=${_SERVICE} \
+            --region=${_REGION} \
+            --format='value(metadata.name)' \
+            --sort-by='~metadata.creationTimestamp' \
+            --limit=2 | tail -1)
+          if [ -n "$$PREVIOUS" ]; then
+            gcloud run services update-traffic ${_SERVICE} \
+              --region=${_REGION} \
+              --to-revisions="$$PREVIOUS=100"
+            echo "✅ Rollback vers $$PREVIOUS"
+          fi
+          exit 1
+        fi
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8

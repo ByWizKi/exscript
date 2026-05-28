@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi import HTTPException, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import create_access_token
-from app.db.models.user import User
+
+from .crud import get_or_create_user
 
 
 async def authenticate_google(token: str, db: AsyncSession) -> dict:
@@ -32,19 +30,12 @@ async def authenticate_google(token: str, db: AsyncSession) -> dict:
             detail=f"Accès réservé aux emails @{settings.allowed_domain}",
         )
 
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        user = User(email=email, name=info.get("name", ""), picture=info.get("picture"))
-        db.add(user)
-    else:
-        user.name = info.get("name", user.name)
-        user.picture = info.get("picture", user.picture)
-        user.last_login = datetime.now(timezone.utc)
-
-    await db.commit()
-    await db.refresh(user)
+    user = await get_or_create_user(
+        db,
+        email=email,
+        name=info.get("name", ""),
+        picture=info.get("picture"),
+    )
 
     access_token = create_access_token({"sub": user.email, "name": user.name})
     return {"access_token": access_token, "user": user}

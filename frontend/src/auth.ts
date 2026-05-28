@@ -9,6 +9,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
+          hd: "extia-inge.fr",
           scope: [
             "openid",
             "email",
@@ -26,8 +27,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     error: "/access-denied",
   },
   callbacks: {
-    async signIn({ account }) {
-      return !!account?.id_token;
+    async signIn({ account, profile }) {
+      if (!account?.id_token) return false;
+      const email = profile?.email ?? "";
+      return email.endsWith("@extia-inge.fr");
     },
     async jwt({ token, account }) {
       if (account?.id_token) {
