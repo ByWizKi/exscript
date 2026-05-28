@@ -10,33 +10,19 @@ from app.modules.settings.service import get_llm_settings, save_llm_settings
 async def test_get_settings_returns_defaults(db):
     settings = await get_llm_settings(db)
     assert settings is not None
-    assert hasattr(settings, "provider")
-    assert settings.provider is not None
+    assert settings.model is not None
 
 
 @pytest.mark.asyncio
 async def test_set_and_get_settings(db):
-    data = LLMSettingsIn(
-        provider="anthropic",
-        model="claude-3-haiku-20240307",
-        api_key="test-key-123",
-    )
+    data = LLMSettingsIn(model="gemini-2.0-pro")
     await save_llm_settings(data, db)
     result = await get_llm_settings(db)
-    assert result.provider == "anthropic"
-    assert result.model == "claude-3-haiku-20240307"
-    assert result.api_key_set is True
+    assert result.model == "gemini-2.0-pro"
 
 
 @pytest.mark.asyncio
-async def test_api_key_not_returned_in_output(db):
-    data = LLMSettingsIn(
-        provider="openai",
-        model="gpt-4o",
-        api_key="secret-key-should-not-leak",
-    )
-    await save_llm_settings(data, db)
+async def test_settings_no_api_key_exposed(db):
     result = await get_llm_settings(db)
-    # api_key should not be in the output, only api_key_set
-    assert not hasattr(result, "api_key") or result.api_key is None
-    assert result.api_key_set is True
+    assert not hasattr(result, "api_key")
+    assert not hasattr(result, "provider")

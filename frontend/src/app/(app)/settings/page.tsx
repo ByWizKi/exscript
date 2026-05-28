@@ -5,27 +5,9 @@ import { useSession } from "next-auth/react";
 import { Save, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/apiFetch";
 
-const PROVIDERS = [
-  { value: "openai",    label: "OpenAI",              placeholder: "sk-..." },
-  { value: "anthropic", label: "Anthropic (Claude)",  placeholder: "sk-ant-..." },
-  { value: "gemini",    label: "Google Gemini",        placeholder: "AIza..." },
-  { value: "ollama",    label: "Ollama (local)",       placeholder: "ollama" },
-];
-
-const DEFAULT_MODELS: Record<string, string> = {
-  openai: "gpt-4o",
-  anthropic: "claude-opus-4-7",
-  gemini: "gemini-1.5-pro",
-  ollama: "llama3",
-};
-
 export default function SettingsPage() {
   const { data: session } = useSession();
-  const [provider, setProvider] = useState("openai");
-  const [model, setModel] = useState("gpt-4o");
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiKeySet, setApiKeySet] = useState(false);
+  const [model, setModel] = useState("gemini-2.0-flash");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,17 +19,9 @@ export default function SettingsPage() {
     })
       .then((r) => r.json())
       .then((d) => {
-        setProvider(d.provider);
         setModel(d.model);
-        setApiKeySet(d.api_key_set);
-        setBaseUrl(d.base_url || "");
       });
   }, [session?.backendToken]);
-
-  const handleProviderChange = (p: string) => {
-    setProvider(p);
-    setModel(DEFAULT_MODELS[p] ?? "");
-  };
 
   const handleSave = async () => {
     if (!session?.backendToken) return;
@@ -61,15 +35,12 @@ export default function SettingsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.backendToken}`,
         },
-        body: JSON.stringify({ provider, model, api_key: apiKey, base_url: baseUrl }),
+        body: JSON.stringify({ model }),
       });
       if (!res.ok) {
         const d = await res.json();
         throw new Error(d.detail ?? "Erreur serveur");
       }
-      const d = await res.json();
-      setApiKeySet(d.api_key_set);
-      setApiKey("");
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
@@ -79,8 +50,6 @@ export default function SettingsPage() {
     }
   };
 
-  const currentProvider = PROVIDERS.find((p) => p.value === provider);
-
   return (
     <div className="p-6 max-w-2xl mx-auto overflow-y-auto scrollbar-thin flex-1">
       <div className="mb-8">
@@ -88,34 +57,11 @@ export default function SettingsPage() {
           Paramètres <span className="text-extia-yellow">LLM</span>
         </h1>
         <p className="text-slate-500 dark:text-white/40 text-sm mt-1">
-          Configurez le provider et le modèle utilisé pour la modification de scripts
+          Modèle Gemini utilisé pour la modification de scripts (via Vertex AI)
         </p>
       </div>
 
       <div className="card rounded-2xl p-6 space-y-5">
-        {/* Provider */}
-        <div>
-          <label className="block text-slate-600 dark:text-white/70 text-xs font-medium mb-2">
-            Provider
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            {PROVIDERS.map((p) => (
-              <button
-                key={p.value}
-                onClick={() => handleProviderChange(p.value)}
-                className={`px-4 py-3 rounded-xl text-sm font-medium transition-colors text-left ${
-                  provider === p.value
-                    ? "bg-extia-yellow/20 text-extia-yellow border border-extia-yellow/40"
-                    : "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-white/60 border border-slate-200 dark:border-white/10 hover:border-extia-yellow/30"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Model */}
         <div>
           <label className="block text-slate-600 dark:text-white/70 text-xs font-medium mb-1.5">
             Modèle
@@ -123,42 +69,13 @@ export default function SettingsPage() {
           <input
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder={DEFAULT_MODELS[provider] ?? "nom-du-modèle"}
+            placeholder="gemini-2.0-flash"
             className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-extia-night dark:text-white placeholder-slate-400 dark:placeholder-white/25 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-extia-yellow transition-colors"
           />
+          <p className="text-slate-400 dark:text-white/30 text-xs mt-1.5">
+            Ex : gemini-2.0-flash, gemini-2.0-pro, gemini-1.5-pro
+          </p>
         </div>
-
-        {/* API Key */}
-        {provider !== "ollama" && (
-          <div>
-            <label className="block text-slate-600 dark:text-white/70 text-xs font-medium mb-1.5">
-              Clé API
-              {apiKeySet && <span className="ml-2 text-green-500 text-xs">✓ configurée</span>}
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={apiKeySet ? "Laisser vide pour conserver la clé actuelle" : currentProvider?.placeholder}
-              className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-extia-night dark:text-white placeholder-slate-400 dark:placeholder-white/25 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-extia-yellow transition-colors"
-            />
-          </div>
-        )}
-
-        {/* Base URL for Ollama */}
-        {provider === "ollama" && (
-          <div>
-            <label className="block text-slate-600 dark:text-white/70 text-xs font-medium mb-1.5">
-              Base URL
-            </label>
-            <input
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="http://localhost:11434/v1"
-              className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-extia-night dark:text-white placeholder-slate-400 dark:placeholder-white/25 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:border-extia-yellow transition-colors"
-            />
-          </div>
-        )}
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl px-4 py-3">
