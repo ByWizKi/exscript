@@ -23,8 +23,9 @@ $RUN ruff format --check .
 
 echo ""
 echo "🔍 [2/6] Lint + TypeScript frontend..."
-$RUN bash -c "cd /frontend && npm run lint"
-$RUN bash -c "cd /frontend && npx tsc --noEmit"
+# Run natively: node_modules are macOS binaries (not Linux), Docker would fail to load SWC
+(cd "$ROOT/frontend" && npm run lint)
+(cd "$ROOT/frontend" && npx tsc --noEmit)
 
 echo ""
 echo "🔍 [3/6] Validate env + lockfiles..."
@@ -42,7 +43,8 @@ $RUN pytest tests/ -x --tb=short -q
 
 echo ""
 echo "🔍 [6/6] Tests frontend + build prod Docker..."
-$RUN bash -c "cd /frontend && npm test -- --watchAll=false --passWithNoTests"
+# Run natively: same reason as step 2
+(cd "$ROOT/frontend" && npm test -- --watchAll=false --passWithNoTests)
 bash "$ROOT/scripts/test_prod_build.sh"
 bash "$ROOT/scripts/test_prod_build_frontend.sh"
 
