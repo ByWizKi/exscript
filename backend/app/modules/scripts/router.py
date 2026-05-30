@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+import traceback
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,6 +101,7 @@ async def ai_modify_endpoint(
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
     except Exception as err:
+        logging.getLogger(__name__).error("ai-modify error: %s\n%s", err, traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(err)) from err
 
 
