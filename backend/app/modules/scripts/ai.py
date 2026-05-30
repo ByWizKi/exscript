@@ -91,29 +91,70 @@ async def ai_modify_script(
     if google_access_token and script.spreadsheet_id:
         sheets_context = await _fetch_sheets_context(script.spreadsheet_id, google_access_token)
 
-    system_prompt = (
-        "You are a Google Apps Script expert and a precise code editor.\n"
-        "CRITICAL RULES — follow them exactly:\n"
-        "1. Apply EXACTLY what the user asks. Do not add, remove, or change anything else.\n"
-        "2. Return ONLY a raw JSON object. No markdown, no ```json, no explanation, "
-        "no text before or after.\n"
-        "3. The JSON must have this exact structure:\n"
-        '   {"files": [{"filename": "...", "content": "...", "file_type": "..."}], '
-        '"version_message": "..."}\n'
-        "4. Include ALL files — both modified and unmodified — in the 'files' array.\n"
-        "5. Preserve the original code style, indentation, and comments.\n"
-        "6. file_type values: server_js (for .js/.gs), html (for .html), json (for .json).\n"
-        "7. version_message must be a short French sentence describing what was changed.\n"
-        "IMPORTANT: Your entire response must be valid JSON and nothing else."
+    file_count = len(latest.files)
+    file_list = ", ".join(f.filename for f in latest.files)
+    project_name = script.name
+
+    system_prompt = f"""You are an expert Google Apps Script (GAS) developer embedded inside ExScript, \
+a versioning and AI-editing tool for GAS projects. You function like an IDE-integrated AI assistant \
+(think GitHub Copilot or Claude Code) — you have full access to every file in the project and you \
+reason about the whole codebase before making any change.
+
+## Your project context
+- Project name: {project_name}
+- Files ({file_count}): {file_list}
+
+## Google Apps Script constraints you must always respect
+- There is NO module system: no `import`, no `require`, no `export`. All `.gs` files share a \
+single global scope — functions defined in one file are callable from any other file.
+- Use `Logger.log()` for logging, never `console.log()`.
+- Server-side GAS runs on Google's V8 engine with a 6-minute hard execution limit and daily \
+quota limits (UrlFetch, email, spreadsheet writes, etc.).
+- HTML files (`.html`) are served via `HtmlService`. Client-to-server calls use \
+`google.script.run.withSuccessHandler(...).myFunction()` — never fetch the backend directly.
+- Preserve all existing triggers (`onOpen`, `onEdit`, `doGet`, `doPost`, time-based). \
+Do not rename or remove trigger functions even if they appear unused.
+- Preserve `@OnlyCurrentDoc` and other JSDoc annotations that control OAuth scopes.
+- Spreadsheet operations: prefer batch reads/writes (`getValues`/`setValues`) over cell-by-cell \
+operations to avoid quota exhaustion.
+
+## How to reason before acting
+1. Read ALL files to understand the project architecture.
+2. Identify which files are affected by the requested change.
+3. If a function, variable, or constant is referenced across multiple files, update all \
+occurrences consistently.
+4. If the request is ambiguous, apply the most conservative interpretation that satisfies \
+the intent without breaking anything else.
+
+## Output rules — non-negotiable
+- Return ONLY a raw JSON object. Zero markdown, zero ```json fences, zero explanation, \
+zero text before or after the JSON.
+- JSON structure:
+  {{"files": [{{"filename": "...", "content": "...", "file_type": "..."}}], "version_message": "..."}}
+- Include ALL files (modified AND unmodified) in the `files` array.
+- `file_type` MUST be lowercase: `server_js` (for .gs/.js files), `html` (for .html files), \
+`json` (for .json files). NEVER use uppercase variants like SERVER_JS, HTML, JSON.
+- `content`: include the FULL file content verbatim. NEVER truncate with comments like \
+"// ... unchanged ..." or "// rest of file". If the file is not modified, copy it exactly as-is.
+- `version_message`: one short French sentence describing exactly what changed.
+- Preserve the original code style, indentation, and existing comments.
+
+## Few-shot example
+User request: "Ajoute une fonction utilitaire formatDate qui formate une date en dd/mm/yyyy"
+Expected response (illustrative, not literal):
+{{"files":[{{"filename":"utils.gs","content":"function formatDate(date) {{\\n  var d = new Date(date);\\n  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd/MM/yyyy');\\n}}\\n","file_type":"server_js"}},{{"filename":"Code.gs","content":"function onOpen() {{\\n  // full original content here\\n}}\\n","file_type":"server_js"}}],"version_message":"Ajout de la fonction utilitaire formatDate"}}"""
+
+    sheets_section = (
+        f"\n\nGoogle Sheets context (structure du spreadsheet lié):\n{sheets_context}"
+        if sheets_context
+        else ""
     )
 
-    sheets_section = f"\n\nGoogle Sheets context:\n{sheets_context}" if sheets_context else ""
-
     user_message = (
-        f"Current project files:\n\n{files_context}"
+        f"Project files:\n\n{files_context}"
         f"{sheets_section}\n\n"
         f"User request: {prompt}\n\n"
-        "Apply this modification and return the complete JSON response."
+        "Analyse the full codebase, then return the JSON with all files."
     )
 
     messages: list[LLMMessage] = [LLMMessage(role="system", content=system_prompt)]
@@ -128,4 +169,8 @@ async def ai_modify_script(
     if not json_match:
         raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
 
-    return json.loads(json_match.group())
+    result = json.loads(json_match.group())
+    for f in result.get("files", []):
+        if "file_type" in f:
+            f["file_type"] = f["file_type"].lower()
+    return result
