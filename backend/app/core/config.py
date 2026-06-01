@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     database_url: str
     jwt_secret: str
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 480
+    jwt_expire_minutes: int = 10080  # 7 jours
     google_client_id: str
     allowed_domain: str = "extia-inge.fr"
     encryption_key: str = ""
