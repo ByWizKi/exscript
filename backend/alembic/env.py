@@ -14,8 +14,7 @@ if config.config_file_name is not None:
 
 # Import all models so autogenerate can detect them
 import app.db.models.script as _  # noqa: F401, E402
-import app.db.models.setting as __  # noqa: F401, E402
-import app.db.models.user as ___  # noqa: F401, E402
+import app.db.models.user as __  # noqa: F401, E402
 from app.db.session import Base  # noqa: E402
 
 target_metadata = Base.metadata
