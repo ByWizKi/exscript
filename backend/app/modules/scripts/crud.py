@@ -84,10 +84,16 @@ async def get_script(script_id: int, db: AsyncSession) -> Script | None:
         .where(Script.id == script_id)
         .options(selectinload(Script.versions).selectinload(ScriptVersion.files))
     )
-    script = result.scalar_one_or_none()
-    if script and script.versions:
-        script.versions = [max(script.versions, key=lambda v: v.version_number)]
-    return script
+    return result.scalar_one_or_none()
+
+
+async def get_version(version_id: int, db: AsyncSession) -> ScriptVersion | None:
+    result = await db.execute(
+        select(ScriptVersion)
+        .where(ScriptVersion.id == version_id)
+        .options(selectinload(ScriptVersion.files))
+    )
+    return result.scalar_one_or_none()
 
 
 async def add_version(
@@ -101,7 +107,7 @@ async def add_version(
     if not script:
         raise ValueError("Script not found")
 
-    next_number = max((v.version_number for v in script.versions), default=0) + 1
+    next_number = (script.latest_version.version_number if script.latest_version else 0) + 1
 
     version = ScriptVersion(
         script_id=script_id,

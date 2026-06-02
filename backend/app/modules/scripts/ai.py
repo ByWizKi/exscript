@@ -73,7 +73,7 @@ async def ai_modify_script(
     history: list | None = None,
 ) -> dict:
     from app.llm.base import LLMMessage
-    from app.modules.settings.service import get_provider_instance
+    from app.llm.factory import get_provider
 
     script = await get_script(script_id, db)
     if not script:
@@ -162,7 +162,7 @@ Expected response (illustrative, not literal):
         messages.append(LLMMessage(role=h.role, content=h.content))
     messages.append(LLMMessage(role="user", content=user_message))
 
-    provider = await get_provider_instance(db)
+    provider = get_provider(name="vertex", model="gemini-2.5-flash", api_key="")
     raw = await provider.complete(messages)
 
     json_match = re.search(r"\{.*\}", raw, re.DOTALL)

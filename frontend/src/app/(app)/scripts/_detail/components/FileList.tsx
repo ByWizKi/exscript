@@ -18,7 +18,7 @@ export function FileList({
   onSelect,
 }: FileListProps) {
   return (
-    <aside className="w-52 flex-shrink-0 border-r border-slate-200 dark:border-white/10 flex flex-col bg-slate-50 dark:bg-extia-night/30">
+    <aside className="flex-1 border-r border-slate-200 dark:border-white/10 flex flex-col bg-slate-50 dark:bg-extia-night/30 min-h-0">
       <div className="px-3 pt-3 pb-1">
         <span className="text-slate-400 dark:text-white/30 text-[10px] font-semibold uppercase tracking-widest">
           Fichiers
@@ -41,7 +41,7 @@ export function FileList({
                     onClick={() => onSelect(f.filename)}
                     className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-all ${
                       isActive
-                        ? "bg-extia-yellow/15 text-extia-yellow"
+                        ? "bg-extia-night/10 dark:bg-extia-yellow/15 text-extia-night dark:text-extia-yellow font-semibold"
                         : "text-slate-500 dark:text-white/55 hover:text-extia-night dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
                     }`}
                   >
@@ -51,7 +51,7 @@ export function FileList({
                     </span>
                     {isModified && (
                       <span
-                        className="w-2 h-2 rounded-full bg-extia-yellow flex-shrink-0"
+                        className="w-2 h-2 rounded-full bg-extia-night dark:bg-extia-yellow flex-shrink-0"
                         title="Modifié"
                       />
                     )}

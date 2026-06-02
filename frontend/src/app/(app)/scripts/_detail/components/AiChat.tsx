@@ -41,9 +41,9 @@ export function AiChat({
 
   return (
     <aside className="w-80 flex-shrink-0 flex flex-col bg-slate-50 dark:bg-extia-night/20">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-white/10 flex-shrink-0">
-        <div className="w-6 h-6 rounded-lg bg-extia-yellow/20 flex items-center justify-center">
-          <Bot className="h-3.5 w-3.5 text-extia-yellow" />
+      <div className="flex items-center gap-2 px-4 h-[38px] border-b border-slate-200 dark:border-white/10 flex-shrink-0">
+        <div className="w-6 h-6 rounded-lg bg-extia-night dark:bg-extia-yellow flex items-center justify-center">
+          <Bot className="h-3.5 w-3.5 text-white dark:text-extia-night" />
         </div>
         <span className="font-heading font-bold text-extia-night dark:text-white text-sm">
           Assistant IA
@@ -86,7 +86,7 @@ export function AiChat({
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             {msg.role === "user" ? (
-              <div className="max-w-[85%] bg-extia-yellow/15 border border-extia-yellow/25 text-extia-night dark:text-white text-xs rounded-2xl rounded-tr-sm px-3 py-2.5">
+              <div className="max-w-[85%] bg-extia-night/8 dark:bg-extia-yellow/15 border border-extia-night/20 dark:border-extia-yellow/25 text-extia-night dark:text-white text-xs rounded-2xl rounded-tr-sm px-3 py-2.5">
                 {msg.text}
               </div>
             ) : msg.error ? (
@@ -97,7 +97,7 @@ export function AiChat({
             ) : (
               <div className="max-w-[90%] space-y-2">
                 <div className="bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/80 text-xs rounded-2xl rounded-tl-sm px-3 py-2.5">
-                  <p className="font-medium text-extia-yellow mb-1">
+                  <p className="font-medium text-extia-night dark:text-extia-yellow mb-1">
                     Modifications prêtes
                   </p>
                   <p className="text-slate-500 dark:text-white/60">{msg.text}</p>
@@ -119,14 +119,14 @@ export function AiChat({
                             <span
                               className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                                 changed
-                                  ? "bg-extia-yellow"
+                                  ? "bg-extia-night dark:bg-extia-yellow"
                                   : "bg-slate-300 dark:bg-white/20"
                               }`}
                             />
                             <span
                               className={`text-[10px] font-mono ${
                                 changed
-                                  ? "text-extia-yellow"
+                                  ? "text-extia-night dark:text-extia-yellow font-semibold"
                                   : "text-slate-400 dark:text-white/40"
                               }`}
                             >
@@ -151,7 +151,7 @@ export function AiChat({
         {aiLoading && (
           <div className="flex justify-start">
             <div className="bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-extia-yellow" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-extia-night dark:text-extia-yellow" />
               <span className="text-slate-400 dark:text-white/40 text-xs">Analyse en cours…</span>
             </div>
           </div>
@@ -168,14 +168,14 @@ export function AiChat({
             placeholder="Ex: Ajoute une colonne Statut dans l'onglet Recap…"
             rows={3}
             disabled={aiLoading}
-            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-extia-night dark:text-white placeholder-slate-300 dark:placeholder-white/20 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-extia-yellow transition-colors resize-none disabled:opacity-50"
+            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-extia-night dark:text-white placeholder-slate-300 dark:placeholder-white/20 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-extia-night dark:focus:border-extia-yellow transition-colors resize-none disabled:opacity-50"
           />
           <div className="flex items-center justify-between">
             <span className="text-slate-300 dark:text-white/20 text-[10px]">⌘ + Entrée</span>
             <button
               onClick={handleSend}
               disabled={!prompt.trim() || aiLoading}
-              className="flex items-center gap-1.5 bg-extia-yellow hover:bg-extia-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed text-extia-night font-bold px-3 py-1.5 rounded-lg text-xs transition-colors"
+              className="flex items-center gap-1.5 bg-extia-night dark:bg-extia-yellow hover:bg-extia-night/80 dark:hover:bg-extia-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed text-white dark:text-extia-night font-bold px-3 py-1.5 rounded-lg text-xs transition-colors"
             >
               <Send className="h-3 w-3" />
               Envoyer

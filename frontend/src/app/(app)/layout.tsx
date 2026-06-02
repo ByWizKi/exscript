@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Code2, Settings, Menu } from "lucide-react";
+import { LayoutDashboard, Code2, Menu } from "lucide-react";
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import { Sidebar } from "@/shared/components";
@@ -53,7 +53,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navItems = useMemo(() => [
     { href: "/",        label: "Dashboard",  icon: LayoutDashboard },
     { href: "/scripts", label: "Scripts",    icon: Code2 },
-    { href: "/settings",label: "Paramètres", icon: Settings },
   ], []);
 
   if (status === "loading") {

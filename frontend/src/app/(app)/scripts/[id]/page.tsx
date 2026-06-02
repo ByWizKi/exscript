@@ -10,8 +10,12 @@ import { FileList } from "../_detail/components/FileList";
 import { CodeViewer } from "../_detail/components/CodeViewer";
 import { AiChat } from "../_detail/components/AiChat";
 import { CreateVersionModal } from "../_detail/components/CreateVersionModal";
+import { PullPreviewModal } from "../_detail/components/PullPreviewModal";
+import { VersionHistory } from "../_detail/components/VersionHistory";
+import { SplitDiffViewer } from "../_detail/components/SplitDiffViewer";
 import type {
   Script,
+  ScriptVersion,
   AiResult,
   ChatMessage,
 } from "../_detail/types";
@@ -34,9 +38,15 @@ export default function ScriptDetailPage() {
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
   const [pulled, setPulled] = useState(false);
+  const [pullPreviewFiles, setPullPreviewFiles] = useState<{ filename: string; content: string; file_type: string }[] | null>(null);
+  const [pullApplying, setPullApplying] = useState(false);
+  const [pullApplyError, setPullApplyError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sidebarTab, setSidebarTab] = useState<"files" | "history">("files");
+  const [viewingVersion, setViewingVersion] = useState<ScriptVersion | null>(null);
+  const [restoring, setRestoring] = useState(false);
 
   const fetchScript = useCallback(async () => {
     if (!session?.backendToken) { setLoading(false); return; }
@@ -69,14 +79,49 @@ export default function ScriptDetailPage() {
     fetchScript();
   }, [fetchScript]);
 
-  const currentFiles = script?.latest_version?.files ?? [];
+  const currentFiles = viewingVersion
+    ? viewingVersion.files
+    : script?.latest_version?.files ?? [];
   const selectedFile = selectedFilename
     ? currentFiles.find((f) => f.filename === selectedFilename) ?? null
     : null;
   const previewContent = pendingResult
     ? pendingResult.files.find((f) => f.filename === selectedFilename)?.content ??
       null
+    : viewingVersion && script?.latest_version
+    ? (script.latest_version.files.find((f) => f.filename === selectedFilename)?.content ?? null)
     : null;
+
+  const handleViewVersion = (version: ScriptVersion) => {
+    setViewingVersion(version);
+    const firstFile = version.files[0]?.filename ?? null;
+    if (firstFile) setSelectedFilename(firstFile);
+  };
+
+  const handleRestore = async (version: ScriptVersion) => {
+    if (!session?.backendToken) return;
+    setRestoring(true);
+    try {
+      const res = await apiFetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/restore/${version.id}`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.backendToken}` },
+        }
+      );
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.detail ?? "Erreur serveur");
+      }
+      setViewingVersion(null);
+      setSidebarTab("files");
+      await fetchScript();
+    } catch {
+      // ignore — could add error state if needed
+    } finally {
+      setRestoring(false);
+    }
+  };
 
   const handleSend = async (overridePrompt?: string) => {
     const text = (overridePrompt ?? prompt).trim();
@@ -131,7 +176,6 @@ export default function ScriptDetailPage() {
           result,
         },
       ]);
-      setShowVersionModal(true);
     } catch (e) {
       setMessages((prev: ChatMessage[]) => [
         ...prev,
@@ -241,7 +285,7 @@ export default function ScriptDetailPage() {
 
     try {
       const res = await apiFetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/pull`,
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/pull-preview`,
         {
           method: "POST",
           headers: {
@@ -257,13 +301,47 @@ export default function ScriptDetailPage() {
         throw new Error(d.detail ?? "Erreur pull");
       }
 
-      setPulled(true);
-      setTimeout(() => setPulled(false), 3000);
-      await fetchScript();
+      const files = await res.json();
+      setPullPreviewFiles(files);
     } catch (e) {
       setPullError(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
       setPulling(false);
+    }
+  };
+
+  const handlePullConfirm = async (message: string) => {
+    if (!pullPreviewFiles || !session?.backendToken) return;
+
+    setPullApplying(true);
+    setPullApplyError(null);
+
+    try {
+      const res = await apiFetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/versions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.backendToken}`,
+          },
+          body: JSON.stringify({ files: pullPreviewFiles, message }),
+        }
+      );
+
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.detail ?? "Erreur serveur");
+      }
+
+      setPullPreviewFiles(null);
+      setPulled(true);
+      setTimeout(() => setPulled(false), 3000);
+      await fetchScript();
+    } catch (e) {
+      setPullApplyError(e instanceof Error ? e.message : "Erreur inconnue");
+    } finally {
+      setPullApplying(false);
     }
   };
 
@@ -305,7 +383,7 @@ export default function ScriptDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-6 w-6 animate-spin text-extia-yellow" />
+        <Loader2 className="h-6 w-6 animate-spin text-extia-night dark:text-extia-yellow" />
       </div>
     );
   }
@@ -329,21 +407,66 @@ export default function ScriptDetailPage() {
         hasGoogleToken={!!session?.googleAccessToken}
         onPush={handlePush}
         onPull={handlePull}
+        onCreateVersion={() => setShowVersionModal(true)}
       />
 
       <div className="flex flex-1 min-h-0">
-        <FileList
-          files={currentFiles}
-          selectedFilename={selectedFilename}
-          pendingResult={pendingResult}
-          onSelect={setSelectedFilename}
-        />
+        <div className="flex flex-col w-52 flex-shrink-0">
+          <div className="flex h-[38px] border-b border-r border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-extia-night/30">
+            <button
+              onClick={() => { setSidebarTab("files"); setViewingVersion(null); }}
+              className={`flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                sidebarTab === "files"
+                  ? "text-extia-night dark:text-extia-yellow border-b-2 border-extia-night dark:border-extia-yellow"
+                  : "text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60"
+              }`}
+            >
+              Fichiers
+            </button>
+            <button
+              onClick={() => setSidebarTab("history")}
+              className={`flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                sidebarTab === "history"
+                  ? "text-extia-night dark:text-extia-yellow border-b-2 border-extia-night dark:border-extia-yellow"
+                  : "text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60"
+              }`}
+            >
+              Historique
+            </button>
+          </div>
+          {sidebarTab === "files" ? (
+            <FileList
+              files={currentFiles}
+              selectedFilename={selectedFilename}
+              pendingResult={pendingResult}
+              onSelect={setSelectedFilename}
+            />
+          ) : (
+            <VersionHistory
+              versions={script.versions}
+              currentVersionId={script.latest_version?.id}
+              viewingVersionId={viewingVersion?.id ?? null}
+              restoring={restoring}
+              onView={handleViewVersion}
+              onRestore={handleRestore}
+            />
+          )}
+        </div>
 
-        <CodeViewer
-          selectedFile={selectedFile}
-          previewContent={previewContent}
-          pendingResult={pendingResult}
-        />
+        {viewingVersion && script.latest_version ? (
+          <SplitDiffViewer
+            oldVersion={viewingVersion}
+            newVersion={script.latest_version}
+            selectedFilename={selectedFilename}
+            onSelectFile={setSelectedFilename}
+          />
+        ) : (
+          <CodeViewer
+            selectedFile={selectedFile}
+            previewContent={previewContent}
+            pendingResult={pendingResult}
+          />
+        )}
 
         <AiChat
           messages={messages}
@@ -358,6 +481,17 @@ export default function ScriptDetailPage() {
           onPromptChange={setPrompt}
         />
       </div>
+
+      {pullPreviewFiles && (
+        <PullPreviewModal
+          pulledFiles={pullPreviewFiles}
+          currentFiles={currentFiles}
+          applying={pullApplying}
+          error={pullApplyError}
+          onConfirm={handlePullConfirm}
+          onDiscard={() => { setPullPreviewFiles(null); setPullApplyError(null); }}
+        />
+      )}
 
       {showVersionModal && pendingResult && (
         <CreateVersionModal

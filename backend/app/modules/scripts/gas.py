@@ -46,16 +46,12 @@ async def push_to_gas(script_id: int, access_token: str, db: AsyncSession) -> No
         raise Exception(detail)
 
 
-async def pull_from_gas(script_id: int, access_token: str, email: str, db: AsyncSession) -> object:
+async def _fetch_files_from_gas(gas_script_id: str, access_token: str) -> list[ScriptFileIn]:
     import httpx
-
-    script = await get_script(script_id, db)
-    if not script:
-        raise ValueError("Script non trouvé")
 
     async with httpx.AsyncClient() as client:
         res = await client.get(
-            f"https://script.googleapis.com/v1/projects/{script.gas_script_id}/content",
+            f"https://script.googleapis.com/v1/projects/{gas_script_id}/content",
             headers={"Authorization": f"Bearer {access_token}"},
         )
 
@@ -82,4 +78,22 @@ async def pull_from_gas(script_id: int, access_token: str, email: str, db: Async
     if not files:
         raise ValueError("Aucun fichier retourné par Apps Script")
 
+    return files
+
+
+async def fetch_from_gas_preview(
+    script_id: int, access_token: str, db: AsyncSession
+) -> list[ScriptFileIn]:
+    script = await get_script(script_id, db)
+    if not script:
+        raise ValueError("Script non trouvé")
+    return await _fetch_files_from_gas(script.gas_script_id, access_token)
+
+
+async def pull_from_gas(script_id: int, access_token: str, email: str, db: AsyncSession) -> object:
+    script = await get_script(script_id, db)
+    if not script:
+        raise ValueError("Script non trouvé")
+
+    files = await _fetch_files_from_gas(script.gas_script_id, access_token)
     return await add_version(script_id, files, "Pull depuis Google Apps Script", email, db)

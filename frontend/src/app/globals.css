@@ -36,10 +36,10 @@
 @font-face { font-family: "Gotham Rounded"; src: url("/fonts/GothamRnd-BoldIta.otf") format("opentype"); font-weight: 700; font-style: italic; font-display: swap; }
 
 :root {
-  --background: #f8f9fb;
+  --background: #ffffff;
   --foreground: #001441;
   --card: #ffffff;
-  --card-border: #9bafd0;
+  --card-border: rgba(0, 20, 65, 0.09);
   --accent: #001441;
   --accent-hover: #1d578c;
   --extia-yellow: #ffd500;
@@ -49,7 +49,7 @@
   --extia-blue-light: #9bafd0;
   --extia-green: #8dbc6a;
   --input-bg: #ffffff;
-  --input-border: #9bafd0;
+  --input-border: rgba(0, 20, 65, 0.18);
   --font-heading: "Mont";
   --font-sans: "Gotham Rounded";
 }
@@ -74,7 +74,7 @@ select {
 input:hover,
 textarea:hover,
 select:hover {
-  border-color: #4379b3;
+  border-color: rgba(0, 20, 65, 0.35);
 }
 input:focus,
 textarea:focus,
@@ -92,12 +92,13 @@ select:focus {
     background: var(--card);
     border: 1px solid var(--card-border);
     border-radius: 0.75rem;
-    box-shadow: 0 2px 8px rgba(0, 20, 65, 0.08);
+    box-shadow: 0 1px 2px rgba(0, 20, 65, 0.04), 0 4px 12px rgba(0, 20, 65, 0.06);
     padding: 1.25rem;
-    transition: box-shadow 0.2s ease;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
   }
   .card:hover {
-    box-shadow: 0 4px 16px rgba(0, 20, 65, 0.12);
+    border-color: rgba(0, 20, 65, 0.15);
+    box-shadow: 0 2px 4px rgba(0, 20, 65, 0.05), 0 8px 24px rgba(0, 20, 65, 0.09);
   }
 }
 
@@ -180,12 +181,23 @@ select:focus {
 
 /* ── App layout background (dark mode via .dark class) ── */
 .app-bg {
-  background: radial-gradient(ellipse at 30% 60%, #d8e2f5 0%, #edf0f9 65%);
+  background: #f4f5f7;
   transition: background 0.3s ease;
 }
 .dark .app-bg {
   background: radial-gradient(ellipse at 30% 60%, #001f5e 0%, #001441 65%);
 }
+
+/* ── Light mode: main content surface ───────────────────────────────────── */
+:not(.dark) main {
+  box-shadow: inset 1px 0 0 rgba(0, 20, 65, 0.06);
+}
+
+/* Panels (sidebars, headers) in light: off-white instead of slate-50 */
+:not(.dark) .bg-slate-50 { background-color: #f8f9fb !important; }
+:not(.dark) .bg-slate-100 { background-color: #f2f4f7 !important; }
+:not(.dark) .border-slate-100 { border-color: rgba(0, 20, 65, 0.07) !important; }
+:not(.dark) .border-slate-200 { border-color: rgba(0, 20, 65, 0.10) !important; }
 
 /* ── Dark mode overrides ─────────────────────────────────────────────────── */
 .dark .card {

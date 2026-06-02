@@ -10,10 +10,11 @@ from .crud import (
     create_script,
     delete_script,
     get_script,
+    get_version,
     list_scripts,
     update_script,
 )
-from .gas import pull_from_gas, push_to_gas
+from .gas import fetch_from_gas_preview, pull_from_gas, push_to_gas
 from .schemas import ScriptCreate, ScriptFileIn, ScriptUpdate
 
 
@@ -56,9 +57,27 @@ async def apply_ai_modification(
     return await ai_modify_script(script_id, prompt, db, google_access_token, history)
 
 
+async def preview_pull(script_id: int, access_token: str, db: AsyncSession) -> list:
+    return await fetch_from_gas_preview(script_id, access_token, db)
+
+
 async def sync_pull(script_id: int, access_token: str, email: str, db: AsyncSession) -> object:
     return await pull_from_gas(script_id, access_token, email, db)
 
 
 async def sync_push(script_id: int, access_token: str, db: AsyncSession) -> None:
     return await push_to_gas(script_id, access_token, db)
+
+
+async def restore_version(
+    script_id: int, version_id: int, owner_email: str, db: AsyncSession
+) -> object:
+    version = await get_version(version_id, db)
+    if not version or version.script_id != script_id:
+        raise ValueError("Version introuvable")
+    files = [
+        ScriptFileIn(filename=f.filename, content=f.content, file_type=f.file_type)
+        for f in version.files
+    ]
+    message = f"Restauration de la version {version.version_number}"
+    return await add_version(script_id, files, message, owner_email, db)

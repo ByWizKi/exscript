@@ -14,6 +14,7 @@ from .schemas import (
     AIModifyResponse,
     PushRequest,
     ScriptCreate,
+    ScriptFileIn,
     ScriptListItem,
     ScriptOut,
     ScriptUpdate,
@@ -26,6 +27,8 @@ from .service import (
     delete_script_by_id,
     get_script_or_none,
     list_all_scripts,
+    preview_pull,
+    restore_version,
     sync_pull,
     sync_push,
     update_script_fields,
@@ -105,6 +108,21 @@ async def ai_modify_endpoint(
         raise HTTPException(status_code=500, detail=str(err)) from err
 
 
+@router.post("/{script_id}/pull-preview", response_model=list[ScriptFileIn])
+async def pull_preview_endpoint(
+    script_id: int,
+    body: PushRequest,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    try:
+        return await preview_pull(script_id, body.access_token, db)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    except Exception as err:
+        raise HTTPException(status_code=502, detail=str(err)) from err
+
+
 @router.post("/{script_id}/pull", response_model=ScriptOut)
 async def pull_from_gas_endpoint(
     script_id: int,
@@ -134,6 +152,19 @@ async def push_to_gas_endpoint(
         raise HTTPException(status_code=400, detail=str(err)) from err
     except Exception as err:
         raise HTTPException(status_code=502, detail=str(err)) from err
+
+
+@router.post("/{script_id}/restore/{version_id}", response_model=ScriptOut, status_code=201)
+async def restore_version_endpoint(
+    script_id: int,
+    version_id: int,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    email: str = Depends(get_current_email),
+):
+    try:
+        return await restore_version(script_id, version_id, email, db)
+    except ValueError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from err
 
 
 @router.post("/{script_id}/versions", response_model=ScriptOut, status_code=201)

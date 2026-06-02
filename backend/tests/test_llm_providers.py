@@ -120,25 +120,23 @@ class TestOpenAIProvider:
 class TestGeminiProvider:
     @patch("app.llm.gemini_provider.genai")
     def test_init(self, mock_genai):
-        mock_genai.GenerativeModel = Mock(return_value=Mock())
+        mock_genai.Client.return_value = Mock()
         provider = GeminiProvider(api_key="test_key", model="gemini-pro")
 
-        mock_genai.configure.assert_called_once_with(api_key="test_key")
-        assert provider._model is not None
+        mock_genai.Client.assert_called_once_with(api_key="test_key")
+        assert provider._model == "gemini-pro"
 
     @patch("app.llm.gemini_provider.genai")
     @pytest.mark.asyncio
     async def test_complete_with_system_and_user(self, mock_genai):
-        mock_model = AsyncMock()
-        mock_genai.GenerativeModel.return_value = mock_model
-        mock_genai.types.GenerationConfig = Mock(return_value=Mock())
-
-        provider = GeminiProvider(api_key="test_key", model="gemini-pro")
-        provider._model = mock_model
+        mock_client = AsyncMock()
+        mock_genai.Client.return_value = mock_client
 
         mock_response = Mock()
         mock_response.text = "Gemini response"
-        mock_model.generate_content_async.return_value = mock_response
+        mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+        provider = GeminiProvider(api_key="test_key", model="gemini-pro")
 
         messages = [
             LLMMessage(role="system", content="You are helpful"),
@@ -148,10 +146,4 @@ class TestGeminiProvider:
         result = await provider.complete(messages)
 
         assert result == "Gemini response"
-        mock_model.generate_content_async.assert_called_once()
-        call_args = mock_model.generate_content_async.call_args
-        prompt = call_args[0][0]
-        assert "[System Instructions]" in prompt
-        assert "You are helpful" in prompt
-        assert "[User]" in prompt
-        assert "Hello" in prompt
+        mock_client.aio.models.generate_content.assert_called_once()

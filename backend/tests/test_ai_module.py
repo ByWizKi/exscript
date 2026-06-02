@@ -177,7 +177,7 @@ async def test_ai_modify_script_success(db):
     with patch("app.modules.scripts.ai._fetch_sheets_context") as mock_fetch_sheets:
         mock_fetch_sheets.return_value = ""
 
-        with patch("app.modules.settings.service.get_provider_instance") as mock_get_provider:
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_get_provider.return_value = mock_provider
 
@@ -213,7 +213,7 @@ async def test_ai_modify_script_with_sheets_context(db):
     with patch("app.modules.scripts.ai._fetch_sheets_context") as mock_fetch_sheets:
         mock_fetch_sheets.return_value = "Spreadsheet: My Data"
 
-        with patch("app.modules.settings.service.get_provider_instance") as mock_get_provider:
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_get_provider.return_value = mock_provider
 
@@ -249,7 +249,7 @@ async def test_ai_modify_script_invalid_json(db):
     with patch("app.modules.scripts.ai._fetch_sheets_context") as mock_fetch_sheets:
         mock_fetch_sheets.return_value = ""
 
-        with patch("app.modules.settings.service.get_provider_instance") as mock_get_provider:
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_get_provider.return_value = mock_provider
 
@@ -278,7 +278,7 @@ async def test_ai_modify_script_with_history(db):
     with patch("app.modules.scripts.ai._fetch_sheets_context") as mock_fetch_sheets:
         mock_fetch_sheets.return_value = ""
 
-        with patch("app.modules.settings.service.get_provider_instance") as mock_get_provider:
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
             mock_provider = AsyncMock()
             mock_get_provider.return_value = mock_provider
 

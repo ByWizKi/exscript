@@ -26,6 +26,7 @@ interface TopBarProps {
   hasGoogleToken: boolean;
   onPush: () => void;
   onPull: () => void;
+  onCreateVersion: () => void;
 }
 
 export function TopBar({
@@ -41,6 +42,7 @@ export function TopBar({
   hasGoogleToken,
   onPush,
   onPull,
+  onCreateVersion,
 }: TopBarProps) {
   return (
     <>
@@ -64,12 +66,13 @@ export function TopBar({
 
         {/* Pending indicator */}
         {pendingResult && (
-          <div className="flex items-center gap-2 bg-extia-yellow/10 border border-extia-yellow/25 rounded-xl px-3 py-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-extia-yellow" />
-            <span className="text-extia-yellow text-xs font-medium hidden sm:block">
-              Aperçu en cours
-            </span>
-          </div>
+          <button
+            onClick={onCreateVersion}
+            className="flex items-center gap-2 bg-extia-night dark:bg-extia-yellow hover:bg-extia-night/80 dark:hover:bg-extia-yellow/90 text-white dark:text-extia-night font-bold rounded-xl px-3 py-1.5 text-xs transition-colors"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden sm:block">Créer la version</span>
+          </button>
         )}
 
         {applied && (
@@ -93,7 +96,7 @@ export function TopBar({
               ) : (
                 <Download className="h-3 w-3" />
               )}
-              {pulled ? "Importé ✓" : "Pull"}
+              {pulled ? "Importé ✓" : "Importer"}
             </button>
             {script.latest_version && (
               <button
@@ -107,7 +110,7 @@ export function TopBar({
                 ) : (
                   <Upload className="h-3 w-3" />
                 )}
-                {pushed ? "Envoyé ✓" : "Push"}
+                {pushed ? "Publié ✓" : "Publier"}
               </button>
             )}
           </div>
@@ -117,13 +120,13 @@ export function TopBar({
       {pushError && (
         <div className="px-5 py-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs flex items-center gap-2 flex-shrink-0">
           <AlertCircle className="h-3.5 w-3.5" />
-          Push : {pushError}
+          Publier : {pushError}
         </div>
       )}
       {pullError && (
         <div className="px-5 py-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs flex items-center gap-2 flex-shrink-0">
           <AlertCircle className="h-3.5 w-3.5" />
-          Pull : {pullError}
+          Importer : {pullError}
         </div>
       )}
     </>

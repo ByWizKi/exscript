@@ -48,6 +48,7 @@ class ScriptOut(BaseModel):
     owner_email: str
     created_at: datetime
     latest_version: ScriptVersionOut | None = None
+    versions: list[ScriptVersionOut] = []
 
     model_config = {"from_attributes": True}
 

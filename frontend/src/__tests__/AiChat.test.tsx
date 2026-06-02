@@ -559,8 +559,8 @@ describe('AiChat Component', () => {
         onPromptChange={mockOnPromptChange}
       />
     );
-    const yellowIndicators = container.querySelectorAll('.bg-extia-yellow');
-    expect(yellowIndicators.length).toBeGreaterThan(0);
+    const nightIndicators = container.querySelectorAll('.bg-extia-night');
+    expect(nightIndicators.length).toBeGreaterThan(0);
   });
 
   it('does not show send button as loading when aiLoading is false', () => {

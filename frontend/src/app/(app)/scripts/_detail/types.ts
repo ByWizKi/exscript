@@ -10,6 +10,7 @@ export interface ScriptVersion {
   version_number: number;
   message: string;
   status: string;
+  created_by: string;
   created_at: string;
   files: ScriptFile[];
 }
@@ -20,6 +21,7 @@ export interface Script {
   gas_script_id: string;
   spreadsheet_id: string;
   latest_version: ScriptVersion | null;
+  versions: ScriptVersion[];
 }
 
 export interface AiFile {

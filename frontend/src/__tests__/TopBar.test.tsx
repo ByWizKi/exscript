@@ -29,6 +29,7 @@ describe('TopBar Component', () => {
     version_number: 1,
     message: 'Initial version',
     status: 'completed',
+    created_by: 'test@example.com',
     created_at: '2024-01-01T00:00:00Z',
     files: [],
   };
@@ -39,6 +40,7 @@ describe('TopBar Component', () => {
     gas_script_id: 'gas123',
     spreadsheet_id: 'sheet123',
     latest_version: mockVersion,
+    versions: [mockVersion],
   };
 
   const mockOnPush = jest.fn();
@@ -61,6 +63,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByText('Test Script')).toBeInTheDocument();
@@ -79,6 +82,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByText(/v1 · Initial version/)).toBeInTheDocument();
@@ -101,12 +105,13 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByText('Aucune version')).toBeInTheDocument();
   });
 
-  it('shows Aperçu en cours badge when pendingResult is provided', () => {
+  it('shows Créer la version button when pendingResult is provided', () => {
     const pendingResult: AiResult = {
       files: [],
       version_message: 'Preview',
@@ -123,12 +128,13 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    expect(screen.getByText('Aperçu en cours')).toBeInTheDocument();
+    expect(screen.getByText('Créer la version')).toBeInTheDocument();
   });
 
-  it('does not show Aperçu en cours when pendingResult is null', () => {
+  it('does not show Créer la version when pendingResult is null', () => {
     const { queryByText } = render(
       <TopBar
         script={mockScript}
@@ -141,9 +147,10 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    expect(queryByText('Aperçu en cours')).not.toBeInTheDocument();
+    expect(queryByText('Créer la version')).not.toBeInTheDocument();
   });
 
   it('shows Version créée when applied is true', () => {
@@ -159,6 +166,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByText('Version créée')).toBeInTheDocument();
@@ -177,12 +185,13 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(queryByText('Version créée')).not.toBeInTheDocument();
   });
 
-  it('shows Pull and Push buttons when hasGoogleToken is true', () => {
+  it('shows Importer and Publier buttons when hasGoogleToken is true', () => {
     render(
       <TopBar
         script={mockScript}
@@ -195,13 +204,14 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    expect(screen.getByText(/Pull/)).toBeInTheDocument();
-    expect(screen.getByText(/Push/)).toBeInTheDocument();
+    expect(screen.getByText(/Importer/)).toBeInTheDocument();
+    expect(screen.getByText(/Publier/)).toBeInTheDocument();
   });
 
-  it('does not show Pull and Push buttons when hasGoogleToken is false', () => {
+  it('does not show Importer and Publier buttons when hasGoogleToken is false', () => {
     const { queryByText } = render(
       <TopBar
         script={mockScript}
@@ -214,13 +224,14 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    expect(queryByText(/Pull/)).not.toBeInTheDocument();
-    expect(queryByText(/Push/)).not.toBeInTheDocument();
+    expect(queryByText(/Importer/)).not.toBeInTheDocument();
+    expect(queryByText(/Publier/)).not.toBeInTheDocument();
   });
 
-  it('disables Pull button when pulling is true', () => {
+  it('disables Importer button when pulling is true', () => {
     render(
       <TopBar
         script={mockScript}
@@ -233,15 +244,16 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    const pullButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Pull'));
+    const pullButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Importer'));
     pullButtons.forEach(btn => {
       expect(btn).toBeDisabled();
     });
   });
 
-  it('disables Pull button when pushing is true (cross-disable)', () => {
+  it('disables Importer button when pushing is true (cross-disable)', () => {
     render(
       <TopBar
         script={mockScript}
@@ -254,15 +266,16 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    const pullButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Pull'));
+    const pullButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Importer'));
     pullButtons.forEach(btn => {
       expect(btn).toBeDisabled();
     });
   });
 
-  it('hides Push button when script has no latest_version', () => {
+  it('hides Publier button when script has no latest_version', () => {
     const scriptNoVersion: Script = {
       ...mockScript,
       latest_version: null,
@@ -279,12 +292,13 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    // Pull should still exist
-    expect(queryByText(/Pull/)).toBeInTheDocument();
-    // But Push should not
-    const allPushButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Push'));
+    // Importer should still exist
+    expect(queryByText(/Importer/)).toBeInTheDocument();
+    // But Publier should not
+    const allPushButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Publier'));
     expect(allPushButtons.length).toBe(0);
   });
 
@@ -302,9 +316,10 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    expect(screen.getByText(/Push : Push failed: network error/)).toBeInTheDocument();
+    expect(screen.getByText(/Publier : Push failed: network error/)).toBeInTheDocument();
   });
 
   it('shows pull error banner when pullError is provided', () => {
@@ -321,12 +336,13 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    expect(screen.getByText(/Pull : Pull failed: authentication error/)).toBeInTheDocument();
+    expect(screen.getByText(/Importer : Pull failed: authentication error/)).toBeInTheDocument();
   });
 
-  it('calls onPull when Pull button clicked', () => {
+  it('calls onPull when Importer button clicked', () => {
     render(
       <TopBar
         script={mockScript}
@@ -339,14 +355,15 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    const pullButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Pull'));
+    const pullButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Importer'));
     fireEvent.click(pullButtons[0]);
     expect(mockOnPull).toHaveBeenCalled();
   });
 
-  it('calls onPush when Push button clicked', () => {
+  it('calls onPush when Publier button clicked', () => {
     render(
       <TopBar
         script={mockScript}
@@ -359,9 +376,10 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    const pushButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Push'));
+    const pushButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Publier'));
     fireEvent.click(pushButtons[0]);
     expect(mockOnPush).toHaveBeenCalled();
   });
@@ -379,12 +397,13 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByText('Importé ✓')).toBeInTheDocument();
   });
 
-  it('shows Pull when pulled is false', () => {
+  it('shows Importer when pulled is false', () => {
     render(
       <TopBar
         script={mockScript}
@@ -397,13 +416,14 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    const pullButton = screen.getAllByRole('button').find(btn => btn.textContent.includes('Pull') && !btn.textContent.includes('Importé'));
-    expect(pullButton?.textContent).toContain('Pull');
+    const pullButton = screen.getAllByRole('button').find(btn => btn.textContent.includes('Importer') && !btn.textContent.includes('Importé'));
+    expect(pullButton?.textContent).toContain('Importer');
   });
 
-  it('shows Envoyé ✓ when pushed is true', () => {
+  it('shows Publié ✓ when pushed is true', () => {
     render(
       <TopBar
         script={mockScript}
@@ -416,12 +436,13 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    expect(screen.getByText('Envoyé ✓')).toBeInTheDocument();
+    expect(screen.getByText('Publié ✓')).toBeInTheDocument();
   });
 
-  it('shows Push when pushed is false', () => {
+  it('shows Publier when pushed is false', () => {
     render(
       <TopBar
         script={mockScript}
@@ -434,10 +455,11 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    const pushButton = screen.getAllByRole('button').find(btn => btn.textContent.includes('Push') && !btn.textContent.includes('Envoyé'));
-    expect(pushButton?.textContent).toContain('Push');
+    const pushButton = screen.getAllByRole('button').find(btn => btn.textContent.includes('Publier') && !btn.textContent.includes('Publié'));
+    expect(pushButton?.textContent).toContain('Publier');
   });
 
   it('renders back link with correct href', () => {
@@ -453,13 +475,14 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     const backLink = screen.getByTestId('arrow-left-icon').closest('a');
     expect(backLink).toHaveAttribute('href', '/scripts');
   });
 
-  it('disables Push button when pushing is true', () => {
+  it('disables Publier button when pushing is true', () => {
     render(
       <TopBar
         script={mockScript}
@@ -472,15 +495,16 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    const pushButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Push'));
+    const pushButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Publier'));
     pushButtons.forEach(btn => {
       expect(btn).toBeDisabled();
     });
   });
 
-  it('disables Push button when pulling is true (cross-disable)', () => {
+  it('disables Publier button when pulling is true (cross-disable)', () => {
     render(
       <TopBar
         script={mockScript}
@@ -493,9 +517,10 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
-    const pushButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Push'));
+    const pushButtons = screen.getAllByRole('button').filter(btn => btn.textContent.includes('Publier'));
     pushButtons.forEach(btn => {
       expect(btn).toBeDisabled();
     });
@@ -518,6 +543,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByTestId('sparkles-icon')).toBeInTheDocument();
@@ -536,6 +562,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={false}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     const checkIcons = screen.getAllByTestId('check-circle-icon');
@@ -555,6 +582,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByTestId('download-icon')).toBeInTheDocument();
@@ -573,6 +601,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByTestId('upload-icon')).toBeInTheDocument();
@@ -592,6 +621,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     expect(screen.getByTestId('alert-icon')).toBeInTheDocument();
@@ -612,6 +642,7 @@ describe('TopBar Component', () => {
         hasGoogleToken={true}
         onPush={mockOnPush}
         onPull={mockOnPull}
+        onCreateVersion={jest.fn()}
       />
     );
     // Alert icon should not be present when no errors

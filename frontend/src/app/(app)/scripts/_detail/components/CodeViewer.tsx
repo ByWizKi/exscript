@@ -21,12 +21,12 @@ export function CodeViewer({
     <section className="flex-1 min-w-0 flex flex-col border-r border-slate-200 dark:border-white/10">
       {selectedFile ? (
         <>
-          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] flex-shrink-0">
+          <div className="flex items-center justify-between px-4 h-[38px] border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] flex-shrink-0">
             <span className="text-xs font-mono text-slate-500 dark:text-white/60">
               {selectedFile.filename}
             </span>
             {showDiff && (
-              <span className="text-[10px] text-extia-yellow font-medium bg-extia-yellow/10 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] text-extia-night dark:text-extia-yellow font-medium bg-extia-night/10 dark:bg-extia-yellow/10 px-2 py-0.5 rounded-full">
                 Diff IA
               </span>
             )}

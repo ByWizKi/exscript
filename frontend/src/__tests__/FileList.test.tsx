@@ -53,7 +53,7 @@ describe('FileList Component', () => {
       />
     );
     const codeJsButton = screen.getByText('Code.js').closest('button');
-    expect(codeJsButton).toHaveClass('bg-extia-yellow/15', 'text-extia-yellow');
+    expect(codeJsButton).toHaveClass('bg-extia-night/10', 'text-extia-night');
   });
 
   it('calls onSelect when a file is clicked', () => {
