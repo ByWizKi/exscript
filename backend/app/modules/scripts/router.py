@@ -10,6 +10,8 @@ from app.core.deps import get_current_email
 from app.db.session import get_db
 
 from .schemas import (
+    AIClarifyRequest,
+    AIClarifyResponse,
     AIModifyRequest,
     AIModifyResponse,
     PushRequest,
@@ -23,6 +25,7 @@ from .schemas import (
 from .service import (
     add_version_to_script,
     apply_ai_modification,
+    clarify_ai_modification,
     create_script_and_fetch,
     delete_script_by_id,
     get_script_or_none,
@@ -90,6 +93,27 @@ async def delete_script_endpoint(
         raise HTTPException(status_code=404, detail="Script non trouvé")
 
 
+@router.post("/{script_id}/ai-clarify", response_model=AIClarifyResponse)
+async def ai_clarify_endpoint(
+    script_id: int,
+    body: AIClarifyRequest,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    try:
+        result = await clarify_ai_modification(script_id, body.prompt, db, body.google_access_token)
+        logging.getLogger(__name__).info(
+            "ai-clarify result type=%s feasible=%s", result.get("type"), result.get("feasible")
+        )
+        return result
+    except ValueError as err:
+        logging.getLogger(__name__).error("ai-clarify ValueError: %s", err)
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    except Exception as err:
+        logging.getLogger(__name__).error("ai-clarify error: %s\n%s", err, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(err)) from err
+
+
 @router.post("/{script_id}/ai-modify", response_model=AIModifyResponse)
 async def ai_modify_endpoint(
     script_id: int,
@@ -98,8 +122,9 @@ async def ai_modify_endpoint(
     _: str = Depends(get_current_email),
 ):
     try:
+        base_files = [f.model_dump() for f in body.base_files] if body.base_files else None
         return await apply_ai_modification(
-            script_id, body.prompt, db, body.google_access_token, body.history
+            script_id, body.prompt, db, body.google_access_token, body.history, base_files
         )
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
