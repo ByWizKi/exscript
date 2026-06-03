@@ -151,6 +151,14 @@ export default function ScriptDetailPage() {
           body: JSON.stringify({
             prompt: text,
             google_access_token: session.googleAccessToken,
+            history: messages
+              .filter((m: ChatMessage) => !m.error)
+              .map((m: ChatMessage) => ({
+                role: m.role,
+                content: m.clarification
+                  ? `[Analyse IA] ${m.clarification.reformulation || m.clarification.explanation}`
+                  : m.text,
+              })),
           }),
         }
       );
@@ -202,8 +210,13 @@ export default function ScriptDetailPage() {
 
     try {
       const history = messages
-        .filter((m: ChatMessage) => !m.error && !m.clarification)
-        .map((m: ChatMessage) => ({ role: m.role, content: m.text }));
+        .filter((m: ChatMessage) => !m.error)
+        .map((m: ChatMessage) => ({
+          role: m.role,
+          content: m.clarification
+            ? `[Analyse IA] ${m.clarification.reformulation || m.clarification.explanation}`
+            : m.text,
+        }));
 
       const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-modify`,

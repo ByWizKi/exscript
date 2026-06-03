@@ -43,9 +43,9 @@ router = APIRouter()
 @router.get("", response_model=list[ScriptListItem])
 async def list_scripts_endpoint(
     db: AsyncSession = Depends(get_db),  # noqa: B008
-    _: str = Depends(get_current_email),
+    email: str = Depends(get_current_email),
 ):
-    return await list_all_scripts(db)
+    return await list_all_scripts(db, email)
 
 
 @router.post("", response_model=ScriptOut, status_code=201)
@@ -101,7 +101,9 @@ async def ai_clarify_endpoint(
     _: str = Depends(get_current_email),
 ):
     try:
-        result = await clarify_ai_modification(script_id, body.prompt, db, body.google_access_token)
+        result = await clarify_ai_modification(
+            script_id, body.prompt, db, body.google_access_token, body.history or None
+        )
         logging.getLogger(__name__).info(
             "ai-clarify result type=%s feasible=%s", result.get("type"), result.get("feasible")
         )

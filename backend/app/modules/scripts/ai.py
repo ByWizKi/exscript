@@ -70,6 +70,7 @@ async def ai_clarify_script(
     prompt: str,
     db: AsyncSession,
     google_access_token: str | None = None,
+    history: list | None = None,
 ) -> dict:
     from app.llm.base import LLMMessage
     from app.llm.factory import get_provider
@@ -122,10 +123,10 @@ Règles générales :
 - "plan" : 2 à 4 actions concrètes sans jargon, basées sur ce qui existe dans le code. Vide si type=explanation.
 - Ne jamais inventer des fonctions ou fichiers qui n'existent pas dans le code fourni"""
 
-    messages = [
-        LLMMessage(role="system", content=system_prompt),
-        LLMMessage(role="user", content=f"Demande de l'utilisateur : {prompt}"),
-    ]
+    messages: list[LLMMessage] = [LLMMessage(role="system", content=system_prompt)]
+    for h in history or []:
+        messages.append(LLMMessage(role=h.role, content=h.content))
+    messages.append(LLMMessage(role="user", content=f"Demande de l'utilisateur : {prompt}"))
 
     provider = get_provider(name="vertex", model="gemini-2.5-flash", api_key="")
     raw = await provider.complete(messages)

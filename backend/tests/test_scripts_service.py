@@ -56,6 +56,6 @@ async def test_list_scripts_returns_created(db):
         files=[ScriptFileIn(filename="Code.js", content="", file_type="server_js")],
     )
     await create_script(data, "user@example.com", db)
-    scripts = await list_scripts(db)
+    scripts = await list_scripts(db, "user@example.com")
     assert len(scripts) >= 1
     assert any(s["name"] == "Listed Script" for s in scripts)
