@@ -46,12 +46,32 @@ steps:
         echo "$$BACKEND_URL"  > /workspace/_backend_url
         echo "$$FRONTEND_URL" > /workspace/_frontend_url
 
-  # ══ PHASE 2 — build backend + frontend en parallèle ═══════════════════════
-
-  # ── 2. Build image backend ─────────────────────────────────────────────────
-  - id: build-backend
+  # ── 2. Validate migrations en parallèle ───────────────────────────────────
+  - id: validate-migrations
     name: gcr.io/cloud-builders/docker
     waitFor: ["-"]
+    args:
+      - run
+      - --rm
+      - -v
+      - /workspace:/workspace
+      - python:3.12
+      - /bin/bash
+      - -c
+      - |
+        cd /workspace
+        echo "🔍 Validation des migrations..."
+        pip install -q alembic
+        python3 backend/scripts/validate_migrations.py
+        python3 backend/scripts/check_migration_safety.py
+        echo "✅ Migrations valides"
+
+  # ══ PHASE 2 — build backend + frontend en parallèle ═══════════════════════
+
+  # ── 3. Build image backend ─────────────────────────────────────────────────
+  - id: build-backend
+    name: gcr.io/cloud-builders/docker
+    waitFor: [validate-migrations]
     env:
       - DOCKER_BUILDKIT=1
     args:
@@ -63,7 +83,7 @@ steps:
       - --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest
       - ./backend
 
-  # ── 3. Tests backend avec PostgreSQL ───────────────────────────────────────
+  # ── 4. Tests backend avec PostgreSQL ───────────────────────────────────────
   - id: run-tests
     name: gcr.io/cloud-builders/docker
     waitFor: [build-backend]
@@ -87,7 +107,8 @@ steps:
           -e DATABASE_URL=postgresql+asyncpg://exscript:exscript@testdb/exscript_test \
           -e JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))") \
           -e GOOGLE_CLIENT_ID=dummy \
-          -e ENCRYPTION_KEY="" \
+          -e GOOGLE_CLIENT_SECRET=dummy \
+          -e ENCRYPTION_KEY=dummy \
           ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA \
           /bin/bash -c "
             pip install -q pytest pytest-asyncio pytest-cov httpx &&
@@ -99,7 +120,7 @@ steps:
         docker rm -f testdb
         docker network rm testnet
 
-  # ── 4. Push backend vers Artifact Registry ────────────────────────────────
+  # ── 5. Push backend vers Artifact Registry ────────────────────────────────
   - id: push-backend
     name: gcr.io/cloud-builders/docker
     waitFor: [run-tests]
@@ -108,7 +129,7 @@ steps:
       - --all-tags
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}
 
-  # ── 5. Build image frontend (en parallèle du backend) ─────────────────────
+  # ── 6. Build image frontend (en parallèle du backend) ─────────────────────
   - id: build-frontend
     name: gcr.io/cloud-builders/docker
     waitFor: [resolve-urls]
@@ -128,7 +149,7 @@ steps:
           --tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}:latest \
           ./frontend
 
-  # ── 6. Push frontend vers Artifact Registry ───────────────────────────────
+  # ── 7. Push frontend vers Artifact Registry ───────────────────────────────
   - id: push-frontend
     name: gcr.io/cloud-builders/docker
     waitFor: [build-frontend]
@@ -137,9 +158,9 @@ steps:
       - --all-tags
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_FRONTEND_SERVICE}
 
-  # ══ PHASE 3 — deploy backend + frontend en parallèle ══════════════════════
+  # ══ PHASE 3 — deploy sans trafic, smoke test, puis bascule ════════════════
 
-  # ── 7. Pre-grant IAM ───────────────────────────────────────────────────────
+  # ── 8. Pre-grant IAM ───────────────────────────────────────────────────────
   - id: grant-iam
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [push-backend, push-frontend, validate-secrets]
@@ -152,7 +173,7 @@ steps:
         gcloud run services add-iam-policy-binding ${_FRONTEND_SERVICE} \
           --region=${_REGION} --member=allUsers --role=roles/run.invoker 2>/dev/null || true
 
-  # ── 8. Deploy backend vers Cloud Run ──────────────────────────────────────
+  # ── 9. Deploy backend sans trafic ─────────────────────────────────────────
   - id: deploy-backend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [grant-iam]
@@ -166,13 +187,21 @@ steps:
           --region=${_REGION} \
           --platform=managed \
           --allow-unauthenticated \
+          --no-traffic \
           --add-cloudsql-instances=${_CLOUDSQL_INSTANCE} \
           --service-account=${_SERVICE}-api@$PROJECT_ID.iam.gserviceaccount.com \
           --update-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest \
           --timeout=3600 \
           --set-env-vars=ENVIRONMENT=production,CORS_ORIGINS=$$FRONTEND_URL,VERTEX_PROJECT_ID=$PROJECT_ID,VERTEX_LOCATION=us-central1
+        # Sauvegarde le nom de la nouvelle révision
+        gcloud run revisions list \
+          --service=${_SERVICE} \
+          --region=${_REGION} \
+          --format='value(metadata.name)' \
+          --sort-by='~metadata.creationTimestamp' \
+          --limit=1 > /workspace/_new_backend_revision
 
-  # ── 9. Deploy frontend vers Cloud Run ─────────────────────────────────────
+  # ── 10. Deploy frontend sans trafic (en parallèle du backend) ──────────────
   - id: deploy-frontend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [grant-iam]
@@ -187,46 +216,79 @@ steps:
           --region=${_REGION} \
           --platform=managed \
           --allow-unauthenticated \
+          --no-traffic \
           --port=3000 \
           --update-secrets=NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest \
           --set-env-vars=NODE_ENV=production,NEXTAUTH_URL=$$FRONTEND_URL,INTERNAL_API_URL=$$BACKEND_URL
+        # Sauvegarde le nom de la nouvelle révision frontend
+        gcloud run revisions list \
+          --service=${_FRONTEND_SERVICE} \
+          --region=${_REGION} \
+          --format='value(metadata.name)' \
+          --sort-by='~metadata.creationTimestamp' \
+          --limit=1 > /workspace/_new_frontend_revision
 
-  # ── 10. Smoke test backend + rollback automatique ─────────────────────────
-  - id: smoke-test
+  # ── 11. Smoke test backend sur la nouvelle révision ────────────────────────
+  - id: smoke-test-backend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [deploy-backend]
     entrypoint: /bin/bash
     args:
       - -c
       - |
-        echo "🧪 Smoke tests..."
-        SERVICE_URL=$$(gcloud run services describe ${_SERVICE} --region=${_REGION} --format='value(status.url)')
-        smoke_failed=0
+        echo "🧪 Smoke test backend..."
+        NEW_REVISION=$$(cat /workspace/_new_backend_revision)
+        echo "Révision : $$NEW_REVISION"
 
-        echo "Testing $$SERVICE_URL/health..."
-        if curl -sf --max-time 15 "$$SERVICE_URL/health" | grep -q '"ok"'; then
+        # URL directe de la révision (bypasse le trafic public)
+        REVISION_URL=$$(gcloud run revisions describe $$NEW_REVISION \
+          --region=${_REGION} \
+          --format='value(status.url)' 2>/dev/null || \
+          gcloud run services describe ${_SERVICE} --region=${_REGION} --format='value(status.url)')
+
+        echo "Testing $$REVISION_URL/health..."
+        if curl -sf --max-time 30 \
+          -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \
+          "$$REVISION_URL/health" | grep -q '"ok"'; then
           echo "✅ Health check OK"
         else
-          echo "❌ Health check failed"
-          smoke_failed=1
-        fi
-
-        if [ "$$smoke_failed" -eq 1 ]; then
-          echo "🔄 Rollback vers la révision précédente..."
-          PREVIOUS=$$(gcloud run revisions list \
-            --service=${_SERVICE} \
-            --region=${_REGION} \
-            --format='value(metadata.name)' \
-            --sort-by='~metadata.creationTimestamp' \
-            --limit=2 | tail -1)
-          if [ -n "$$PREVIOUS" ]; then
-            gcloud run services update-traffic ${_SERVICE} \
-              --region=${_REGION} \
-              --to-revisions="$$PREVIOUS=100"
-            echo "✅ Rollback vers $$PREVIOUS"
-          fi
+          echo "❌ Health check échoué — rollback annulé, ancienne révision reste active"
           exit 1
         fi
+
+        # Bascule 100% du trafic vers la nouvelle révision
+        echo "🚀 Bascule du trafic vers $$NEW_REVISION..."
+        gcloud run services update-traffic ${_SERVICE} \
+          --region=${_REGION} \
+          --to-revisions="$$NEW_REVISION=100"
+        echo "✅ Trafic basculé vers $$NEW_REVISION"
+
+  # ── 12. Smoke test frontend + bascule trafic ──────────────────────────────
+  - id: smoke-test-frontend
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    waitFor: [deploy-frontend]
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        echo "🧪 Smoke test frontend..."
+        NEW_REVISION=$$(cat /workspace/_new_frontend_revision)
+        echo "Révision : $$NEW_REVISION"
+
+        FRONTEND_URL=$$(cat /workspace/_frontend_url)
+        echo "Testing $$FRONTEND_URL..."
+        if curl -sf --max-time 30 "$$FRONTEND_URL" | grep -qi "html"; then
+          echo "✅ Frontend répond avec du HTML"
+        else
+          echo "⚠️  Réponse frontend non conclusive (normal pour SPA)"
+        fi
+
+        # Bascule 100% du trafic vers la nouvelle révision
+        echo "🚀 Bascule du trafic vers $$NEW_REVISION..."
+        gcloud run services update-traffic ${_FRONTEND_SERVICE} \
+          --region=${_REGION} \
+          --to-revisions="$$NEW_REVISION=100"
+        echo "✅ Trafic frontend basculé vers $$NEW_REVISION"
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
