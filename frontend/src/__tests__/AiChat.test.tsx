@@ -8,6 +8,9 @@ jest.mock('lucide-react', () => ({
   Bot: () => <span data-testid="bot-icon">BotIcon</span>,
   Send: () => <span data-testid="send-icon">SendIcon</span>,
   AlertCircle: () => <span data-testid="alert-icon">AlertIcon</span>,
+  Check: () => <span data-testid="check-icon">CheckIcon</span>,
+  X: () => <span data-testid="x-icon">XIcon</span>,
+  BookOpen: () => <span data-testid="bookopen-icon">BookOpenIcon</span>,
 }));
 
 describe('AiChat Component', () => {
@@ -112,7 +115,7 @@ describe('AiChat Component', () => {
         onPromptChange={mockOnPromptChange}
       />
     );
-    expect(screen.getByText('Analyse en cours…')).toBeInTheDocument();
+    expect(screen.getByText('Traitement en cours…')).toBeInTheDocument();
     expect(screen.getByTestId('loader-icon')).toBeInTheDocument();
   });
 
