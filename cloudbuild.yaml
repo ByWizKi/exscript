@@ -173,7 +173,7 @@ steps:
         gcloud run services add-iam-policy-binding ${_FRONTEND_SERVICE} \
           --region=${_REGION} --member=allUsers --role=roles/run.invoker 2>/dev/null || true
 
-  # ── 9. Deploy backend sans trafic ─────────────────────────────────────────
+  # ── 9. Deploy backend sans trafic + tag canary ────────────────────────────
   - id: deploy-backend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [grant-iam]
@@ -188,12 +188,16 @@ steps:
           --platform=managed \
           --allow-unauthenticated \
           --no-traffic \
+          --tag=canary \
           --add-cloudsql-instances=${_CLOUDSQL_INSTANCE} \
           --service-account=${_SERVICE}-api@$PROJECT_ID.iam.gserviceaccount.com \
           --update-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,ENCRYPTION_KEY=ENCRYPTION_KEY:latest \
           --timeout=3600 \
           --set-env-vars=ENVIRONMENT=production,CORS_ORIGINS=$$FRONTEND_URL,VERTEX_PROJECT_ID=$PROJECT_ID,VERTEX_LOCATION=us-central1
-        # Sauvegarde le nom de la nouvelle révision
+        # URL tagged : https://canary---SERVICE-URL (accessible sans auth car service public)
+        SERVICE_URL=$$(gcloud run services describe ${_SERVICE} --region=${_REGION} --format='value(status.url)')
+        SERVICE_HOST=$${SERVICE_URL#https://}
+        echo "https://canary---$$SERVICE_HOST" > /workspace/_canary_backend_url
         gcloud run revisions list \
           --service=${_SERVICE} \
           --region=${_REGION} \
@@ -201,7 +205,7 @@ steps:
           --sort-by='~metadata.creationTimestamp' \
           --limit=1 > /workspace/_new_backend_revision
 
-  # ── 10. Deploy frontend sans trafic (en parallèle du backend) ──────────────
+  # ── 10. Deploy frontend sans trafic + tag canary (en parallèle du backend) ─
   - id: deploy-frontend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [grant-iam]
@@ -217,10 +221,13 @@ steps:
           --platform=managed \
           --allow-unauthenticated \
           --no-traffic \
+          --tag=canary \
           --port=3000 \
           --update-secrets=NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest \
           --set-env-vars=NODE_ENV=production,NEXTAUTH_URL=$$FRONTEND_URL,INTERNAL_API_URL=$$BACKEND_URL
-        # Sauvegarde le nom de la nouvelle révision frontend
+        FRONTEND_SERVICE_URL=$$(gcloud run services describe ${_FRONTEND_SERVICE} --region=${_REGION} --format='value(status.url)')
+        FRONTEND_SERVICE_HOST=$${FRONTEND_SERVICE_URL#https://}
+        echo "https://canary---$$FRONTEND_SERVICE_HOST" > /workspace/_canary_frontend_url
         gcloud run revisions list \
           --service=${_FRONTEND_SERVICE} \
           --region=${_REGION} \
@@ -228,7 +235,7 @@ steps:
           --sort-by='~metadata.creationTimestamp' \
           --limit=1 > /workspace/_new_frontend_revision
 
-  # ── 11. Smoke test backend sur la nouvelle révision ────────────────────────
+  # ── 11. Smoke test backend via URL canary (sans auth, service public) ───────
   - id: smoke-test-backend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [deploy-backend]
@@ -238,32 +245,32 @@ steps:
       - |
         echo "🧪 Smoke test backend..."
         NEW_REVISION=$$(cat /workspace/_new_backend_revision)
-        echo "Révision : $$NEW_REVISION"
+        CANARY_URL=$$(cat /workspace/_canary_backend_url)
+        echo "Révision  : $$NEW_REVISION"
+        echo "Canary URL: $$CANARY_URL"
 
-        # URL directe de la révision (bypasse le trafic public)
-        REVISION_URL=$$(gcloud run revisions describe $$NEW_REVISION \
-          --region=${_REGION} \
-          --format='value(status.url)' 2>/dev/null || \
-          gcloud run services describe ${_SERVICE} --region=${_REGION} --format='value(status.url)')
+        for i in $$(seq 1 6); do
+          if curl -sf --max-time 15 "$$CANARY_URL/health" | grep -q '"ok"'; then
+            echo "✅ Health check OK"
+            break
+          fi
+          echo "   tentative $$i/6 — attente 10s..."
+          sleep 10
+          if [ $$i -eq 6 ]; then
+            echo "❌ Health check échoué — ancienne révision reste active"
+            gcloud run services update-traffic ${_SERVICE} --region=${_REGION} --remove-tags=canary
+            exit 1
+          fi
+        done
 
-        echo "Testing $$REVISION_URL/health..."
-        if curl -sf --max-time 30 \
-          -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \
-          "$$REVISION_URL/health" | grep -q '"ok"'; then
-          echo "✅ Health check OK"
-        else
-          echo "❌ Health check échoué — rollback annulé, ancienne révision reste active"
-          exit 1
-        fi
-
-        # Bascule 100% du trafic vers la nouvelle révision
         echo "🚀 Bascule du trafic vers $$NEW_REVISION..."
         gcloud run services update-traffic ${_SERVICE} \
           --region=${_REGION} \
           --to-revisions="$$NEW_REVISION=100"
+        gcloud run services update-traffic ${_SERVICE} --region=${_REGION} --remove-tags=canary
         echo "✅ Trafic basculé vers $$NEW_REVISION"
 
-  # ── 12. Smoke test frontend + bascule trafic ──────────────────────────────
+  # ── 12. Smoke test frontend via URL canary + bascule trafic ─────────────────
   - id: smoke-test-frontend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     waitFor: [deploy-frontend]
@@ -273,21 +280,28 @@ steps:
       - |
         echo "🧪 Smoke test frontend..."
         NEW_REVISION=$$(cat /workspace/_new_frontend_revision)
-        echo "Révision : $$NEW_REVISION"
+        CANARY_URL=$$(cat /workspace/_canary_frontend_url)
+        echo "Révision  : $$NEW_REVISION"
+        echo "Canary URL: $$CANARY_URL"
 
-        FRONTEND_URL=$$(cat /workspace/_frontend_url)
-        echo "Testing $$FRONTEND_URL..."
-        if curl -sf --max-time 30 "$$FRONTEND_URL" | grep -qi "html"; then
-          echo "✅ Frontend répond avec du HTML"
-        else
-          echo "⚠️  Réponse frontend non conclusive (normal pour SPA)"
-        fi
+        for i in $$(seq 1 6); do
+          if curl -sf --max-time 15 "$$CANARY_URL" | grep -qi "html"; then
+            echo "✅ Frontend répond avec du HTML"
+            break
+          fi
+          echo "   tentative $$i/6 — attente 10s..."
+          sleep 10
+          if [ $$i -eq 6 ]; then
+            echo "⚠️  Réponse frontend non conclusive — bascule quand même"
+            break
+          fi
+        done
 
-        # Bascule 100% du trafic vers la nouvelle révision
         echo "🚀 Bascule du trafic vers $$NEW_REVISION..."
         gcloud run services update-traffic ${_FRONTEND_SERVICE} \
           --region=${_REGION} \
           --to-revisions="$$NEW_REVISION=100"
+        gcloud run services update-traffic ${_FRONTEND_SERVICE} --region=${_REGION} --remove-tags=canary
         echo "✅ Trafic frontend basculé vers $$NEW_REVISION"
 
 images:
