@@ -169,7 +169,10 @@ Expected response (illustrative, not literal):
     if not json_match:
         raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
 
-    result = json.loads(json_match.group())
+    json_str = json_match.group()
+    # Fix invalid JSON escape sequences produced by LLM (e.g. \s \d \w in JS regex)
+    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", json_str)
+    result = json.loads(json_str)
     for f in result.get("files", []):
         if "file_type" in f:
             f["file_type"] = f["file_type"].lower()
