@@ -35,9 +35,21 @@ export interface AiResult {
   version_message: string;
 }
 
+export interface AiClarification {
+  type: "modification" | "explanation";
+  feasible: boolean;
+  reformulation: string;
+  explanation: string;
+  files_affected: string[];
+  plan: string[];
+  original_prompt: string;
+  confirmed: boolean | null; // null = en attente, true = confirmé, false = annulé
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   result?: AiResult;
   error?: string;
+  clarification?: AiClarification;
 }

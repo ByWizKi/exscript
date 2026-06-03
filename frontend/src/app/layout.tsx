@@ -3,7 +3,7 @@ import "./globals.css";
 import SessionProviderWrapper from "./components/SessionProviderWrapper";
 
 export const metadata: Metadata = {
-  title: "ExScript — Extia Ingénierie",
+  title: "ExScript",
   description: "Configurateur Google Apps Script",
 };
 
