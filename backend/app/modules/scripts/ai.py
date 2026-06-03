@@ -55,22 +55,21 @@ async def _fetch_sheets_context(spreadsheet_id: str, access_token: str) -> str:
         lines.append("Colonnes : " + " | ".join(headers))
         lines.append(f"Nombre de lignes de données : {len(table_rows) - 1}")
 
-        # Show up to 5 sample rows
-        for row in table_rows[1:6]:
+        # Show up to 3 sample rows
+        for row in table_rows[1:4]:
             row += [""] * (max_cols - len(row))
             lines.append("  " + " | ".join(row))
-        if len(table_rows) > 6:
-            lines.append(f"  ... ({len(table_rows) - 6} lignes supplémentaires)")
+        if len(table_rows) > 4:
+            lines.append(f"  ... ({len(table_rows) - 4} lignes supplémentaires)")
 
     return "\n".join(lines)
 
 
-async def ai_modify_script(
+async def ai_clarify_script(
     script_id: int,
     prompt: str,
     db: AsyncSession,
     google_access_token: str | None = None,
-    history: list | None = None,
 ) -> dict:
     from app.llm.base import LLMMessage
     from app.llm.factory import get_provider
@@ -83,16 +82,111 @@ async def ai_modify_script(
     if not latest or not latest.files:
         raise ValueError("No files found in the latest version")
 
+    file_list = ", ".join(f.filename for f in latest.files)
     files_context = "\n\n".join(
         f"### {f.filename}\n```javascript\n{f.content}\n```" for f in latest.files
+    )
+    project_name = script.name
+
+    sheets_context = ""
+    if google_access_token and script.spreadsheet_id:
+        sheets_context = await _fetch_sheets_context(script.spreadsheet_id, google_access_token)
+
+    sheets_section = (
+        f"\n\nGoogle Sheets lié (structure) :\n{sheets_context}" if sheets_context else ""
+    )
+
+    system_prompt = f"""Tu es un expert Google Apps Script (GAS) qui aide des personnes non-techniques.
+Ton rôle ici est uniquement de COMPRENDRE et REFORMULER la demande de l'utilisateur, pas de générer du code.
+
+Projet : {project_name}
+Fichiers disponibles : {file_list}
+
+Contenu actuel des fichiers :
+{files_context}{sheets_section}
+
+Analyse la demande et réponds en JSON strictement de cette forme (sans markdown, sans texte autour) :
+{{"type": "modification", "feasible": true, "reformulation": "...", "explanation": "", "files_affected": [], "plan": []}}
+
+RÈGLE PRIMORDIALE sur "type" — détermine-le EN PREMIER avant tout :
+- "explanation" : dès que l'utilisateur pose une question ou demande de comprendre quelque chose. Mots-clés : "explique", "c'est quoi", "comment fonctionne", "que fait", "décris", "qu'est-ce que", "pourquoi", "comment", "dis-moi". TYPE EXPLANATION même si la demande contient aussi des mots comme "projet", "script", "code".
+- "modification" : UNIQUEMENT si l'utilisateur demande explicitement un changement dans le code : "ajoute", "modifie", "supprime", "corrige", "améliore", "refactorise", "crée une fonction".
+
+Règles sur "feasible" (uniquement pour type=modification) :
+- false si la demande est hors scope, destructrice, ou impossible en Google Apps Script. Mets alors "reformulation" = explication courte du refus, "files_affected" = [], "plan" = [].
+
+Règles générales :
+- "reformulation" : pour une modification, explique ce que tu vas faire en français simple, commence par "Je vais...". Pour une explication, laisse vide "".
+- "explanation" : pour une question/explication, ta réponse complète en français simple (plusieurs phrases ok). Pour une modification, laisse vide "".
+- "files_affected" : uniquement les fichiers réellement modifiés parmi [{file_list}], basé sur le contenu réel des fichiers ci-dessus
+- "plan" : 2 à 4 actions concrètes sans jargon, basées sur ce qui existe dans le code. Vide si type=explanation.
+- Ne jamais inventer des fonctions ou fichiers qui n'existent pas dans le code fourni"""
+
+    messages = [
+        LLMMessage(role="system", content=system_prompt),
+        LLMMessage(role="user", content=f"Demande de l'utilisateur : {prompt}"),
+    ]
+
+    provider = get_provider(name="vertex", model="gemini-2.5-flash", api_key="")
+    raw = await provider.complete(messages)
+
+    start = raw.find("{")
+    if start == -1:
+        raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
+
+    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", raw[start:])
+    try:
+        result, _ = json.JSONDecoder().raw_decode(json_str)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM JSON parse error: {exc}. Response: {raw[:200]}") from exc
+
+    return {
+        "type": result.get("type", "modification"),
+        "feasible": result.get("feasible", True),
+        "reformulation": result.get("reformulation", ""),
+        "explanation": result.get("explanation", ""),
+        "files_affected": result.get("files_affected", []),
+        "plan": result.get("plan", []),
+    }
+
+
+async def ai_modify_script(
+    script_id: int,
+    prompt: str,
+    db: AsyncSession,
+    google_access_token: str | None = None,
+    history: list | None = None,
+    base_files: list | None = None,
+) -> dict:
+    from app.llm.base import LLMMessage
+    from app.llm.factory import get_provider
+
+    script = await get_script(script_id, db)
+    if not script:
+        raise ValueError("Script not found")
+
+    if base_files:
+        # Use provided files (previous AI result not yet saved) as the working base
+        working_files = base_files
+    else:
+        latest = script.versions[0] if script.versions else None
+        if not latest or not latest.files:
+            raise ValueError("No files found in the latest version")
+        working_files = [
+            {"filename": f.filename, "content": f.content, "file_type": f.file_type}
+            for f in latest.files
+        ]
+
+    files_context = "\n\n".join(
+        f"### {f['filename']}\n```javascript\n{f['content']}\n```" for f in working_files
     )
 
     sheets_context = ""
     if google_access_token and script.spreadsheet_id:
         sheets_context = await _fetch_sheets_context(script.spreadsheet_id, google_access_token)
 
-    file_count = len(latest.files)
-    file_list = ", ".join(f.filename for f in latest.files)
+    file_count = len(working_files)
+    file_list = ", ".join(f["filename"] for f in working_files)
     project_name = script.name
 
     system_prompt = f"""You are an expert Google Apps Script (GAS) developer embedded inside ExScript, \
@@ -131,18 +225,18 @@ the intent without breaking anything else.
 zero text before or after the JSON.
 - JSON structure:
   {{"files": [{{"filename": "...", "content": "...", "file_type": "..."}}], "version_message": "..."}}
-- Include ALL files (modified AND unmodified) in the `files` array.
+- Include ONLY the files you actually modify. Unchanged files must be omitted entirely.
 - `file_type` MUST be lowercase: `server_js` (for .gs/.js files), `html` (for .html files), \
 `json` (for .json files). NEVER use uppercase variants like SERVER_JS, HTML, JSON.
-- `content`: include the FULL file content verbatim. NEVER truncate with comments like \
-"// ... unchanged ..." or "// rest of file". If the file is not modified, copy it exactly as-is.
+- `content`: include the FULL content of the modified file. NEVER truncate with comments like \
+"// ... unchanged ..." or "// rest of file".
 - `version_message`: one short French sentence describing exactly what changed.
 - Preserve the original code style, indentation, and existing comments.
 
 ## Few-shot example
 User request: "Ajoute une fonction utilitaire formatDate qui formate une date en dd/mm/yyyy"
-Expected response (illustrative, not literal):
-{{"files":[{{"filename":"utils.gs","content":"function formatDate(date) {{\\n  var d = new Date(date);\\n  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd/MM/yyyy');\\n}}\\n","file_type":"server_js"}},{{"filename":"Code.gs","content":"function onOpen() {{\\n  // full original content here\\n}}\\n","file_type":"server_js"}}],"version_message":"Ajout de la fonction utilitaire formatDate"}}"""
+Expected response (illustrative, not literal — only utils.gs is modified, Code.gs is omitted):
+{{"files":[{{"filename":"utils.gs","content":"function formatDate(date) {{\\n  var d = new Date(date);\\n  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd/MM/yyyy');\\n}}\\n","file_type":"server_js"}}],"version_message":"Ajout de la fonction utilitaire formatDate"}}"""
 
     sheets_section = (
         f"\n\nGoogle Sheets context (structure du spreadsheet lié):\n{sheets_context}"
@@ -154,7 +248,7 @@ Expected response (illustrative, not literal):
         f"Project files:\n\n{files_context}"
         f"{sheets_section}\n\n"
         f"User request: {prompt}\n\n"
-        "Analyse the full codebase, then return the JSON with all files."
+        "Analyse the full codebase, then return the JSON with ONLY the modified files."
     )
 
     messages: list[LLMMessage] = [LLMMessage(role="system", content=system_prompt)]
@@ -165,15 +259,33 @@ Expected response (illustrative, not literal):
     provider = get_provider(name="vertex", model="gemini-2.5-flash", api_key="")
     raw = await provider.complete(messages)
 
-    json_match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not json_match:
+    start = raw.find("{")
+    if start == -1:
         raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
 
-    json_str = json_match.group()
     # Fix invalid JSON escape sequences produced by LLM (e.g. \s \d \w in JS regex)
-    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", json_str)
-    result = json.loads(json_str)
-    for f in result.get("files", []):
+    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", raw[start:])
+    try:
+        result, _ = json.JSONDecoder().raw_decode(json_str)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM JSON parse error: {exc}. Response: {raw[:200]}") from exc
+    modified = {f["filename"]: f for f in result.get("files", [])}
+    for f in modified.values():
         if "file_type" in f:
             f["file_type"] = f["file_type"].lower()
+
+    # Merge: LLM only returns modified files, fill the rest from DB
+    merged = []
+    for original in working_files:
+        fname = original["filename"] if isinstance(original, dict) else original.filename
+        fcontent = original["content"] if isinstance(original, dict) else original.content
+        ftype = original["file_type"] if isinstance(original, dict) else original.file_type
+        if fname in modified:
+            merged.append(modified[fname])
+        else:
+            merged.append({"filename": fname, "content": fcontent, "file_type": ftype})
+
+    result["files"] = merged
+    if not result.get("version_message"):
+        result["version_message"] = "Modification du script"
     return result

@@ -35,9 +35,14 @@ class VertexProvider(LLMProvider):
             system_instruction=system_instruction,
         )
 
-        response = await self._client.aio.models.generate_content(
-            model=self._model,
-            contents=contents,
-            config=config,
+        import asyncio
+
+        response = await asyncio.wait_for(
+            self._client.aio.models.generate_content(
+                model=self._model,
+                contents=contents,
+                config=config,
+            ),
+            timeout=120,
         )
         return response.text
