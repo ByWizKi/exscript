@@ -3,7 +3,7 @@ FROM node:20-alpine AS development
 
 WORKDIR /app
 COPY package*.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
 
 CMD ["npm", "run", "dev"]
@@ -13,7 +13,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
 
 ARG NEXT_PUBLIC_API_URL
