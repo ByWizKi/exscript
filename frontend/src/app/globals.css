@@ -51,7 +51,7 @@
   --input-bg: #ffffff;
   --input-border: rgba(0, 20, 65, 0.18);
   --font-heading: "Mont";
-  --font-sans: "Gotham Rounded";
+  --font-sans: "Mont";
 }
 
 body {
@@ -152,6 +152,15 @@ select:focus {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(0,20,65,0.08);
   box-shadow: 0 30px 60px -12px rgba(0,20,65,0.16), 0 0 0 1px rgba(0,20,65,0.04);
+}
+
+.l-brand-title {
+  font-family: "Mont", ui-sans-serif, sans-serif;
+  font-weight: 900;
+  font-size: 3rem;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  margin: 0 0 10px 0;
 }
 
 [data-t="dark"]  .brand-ex  { color: rgb(255 213 0); text-shadow: 0 0 28px rgba(255,213,0,0.55); }

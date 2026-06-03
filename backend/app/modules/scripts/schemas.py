@@ -71,10 +71,17 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class BaseFile(BaseModel):
+    filename: str
+    content: str
+    file_type: str
+
+
 class AIModifyRequest(BaseModel):
     prompt: str
     google_access_token: str | None = None
     history: list[ChatMessage] = []
+    base_files: list[BaseFile] | None = None
 
 
 class AIFileResult(BaseModel):
@@ -91,6 +98,20 @@ class AIModifyResponse(BaseModel):
 class VersionCreate(BaseModel):
     files: list[ScriptFileIn]
     message: str
+
+
+class AIClarifyRequest(BaseModel):
+    prompt: str
+    google_access_token: str | None = None
+
+
+class AIClarifyResponse(BaseModel):
+    type: str = "modification"
+    feasible: bool = True
+    reformulation: str = ""
+    explanation: str = ""
+    files_affected: list[str]
+    plan: list[str]
 
 
 class PushRequest(BaseModel):

@@ -17,6 +17,7 @@ import type {
   Script,
   ScriptVersion,
   AiResult,
+  AiClarification,
   ChatMessage,
 } from "../_detail/types";
 
@@ -128,16 +129,81 @@ export default function ScriptDetailPage() {
     if (!text || aiLoading || !session?.backendToken) return;
 
     setPrompt("");
-    setMessages((prev) => [...prev, { role: "user", text }]);
+    setMessages((prev) => [
+      ...prev.map((m) =>
+        m.clarification?.confirmed === null
+          ? { ...m, clarification: { ...m.clarification, confirmed: false as const } }
+          : m
+      ),
+      { role: "user" as const, text },
+    ]);
+    setAiLoading(true);
+
+    try {
+      const res = await apiFetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-clarify`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.backendToken}`,
+          },
+          body: JSON.stringify({
+            prompt: text,
+            google_access_token: session.googleAccessToken,
+          }),
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Erreur serveur");
+
+      const isExplanation = data.type === "explanation";
+      const clarification: AiClarification = {
+        type: data.type ?? "modification",
+        feasible: data.feasible ?? true,
+        reformulation: data.reformulation ?? "",
+        explanation: data.explanation ?? "",
+        files_affected: data.files_affected ?? [],
+        plan: data.plan ?? [],
+        original_prompt: text,
+        confirmed: (isExplanation || data.feasible === false) ? false : null,
+      };
+
+      setMessages((prev: ChatMessage[]) => [
+        ...prev,
+        { role: "assistant" as const, text: "", clarification },
+      ]);
+    } catch (e) {
+      setMessages((prev: ChatMessage[]) => [
+        ...prev,
+        {
+          role: "assistant" as const,
+          text: "",
+          error: e instanceof Error ? e.message : "Erreur inconnue",
+        },
+      ]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleConfirm = async (originalPrompt: string) => {
+    if (aiLoading || !session?.backendToken) return;
+
+    setMessages((prev: ChatMessage[]) =>
+      prev.map((m) =>
+        m.clarification?.original_prompt === originalPrompt && m.clarification.confirmed === null
+          ? { ...m, clarification: { ...m.clarification, confirmed: true } }
+          : m
+      )
+    );
     setAiLoading(true);
 
     try {
       const history = messages
-        .filter((m: ChatMessage) => !m.error)
-        .map((m: ChatMessage) => ({
-          role: m.role,
-          content: m.text,
-        }));
+        .filter((m: ChatMessage) => !m.error && !m.clarification)
+        .map((m: ChatMessage) => ({ role: m.role, content: m.text }));
 
       const res = await apiFetch(
         `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-modify`,
@@ -148,9 +214,10 @@ export default function ScriptDetailPage() {
             Authorization: `Bearer ${session.backendToken}`,
           },
           body: JSON.stringify({
-            prompt: text,
+            prompt: originalPrompt,
             google_access_token: session.googleAccessToken,
             history,
+            base_files: pendingResult?.files ?? null,
           }),
         }
       );
@@ -162,19 +229,13 @@ export default function ScriptDetailPage() {
       setPendingResult(result);
 
       const firstMod = result.files.find(
-        (f) =>
-          f.content !==
-          currentFiles.find((cf) => cf.filename === f.filename)?.content
+        (f) => f.content !== currentFiles.find((cf) => cf.filename === f.filename)?.content
       );
       if (firstMod) setSelectedFilename(firstMod.filename);
 
       setMessages((prev: ChatMessage[]) => [
         ...prev,
-        {
-          role: "assistant" as const,
-          text: result.version_message,
-          result,
-        },
+        { role: "assistant" as const, text: result.version_message, result },
       ]);
     } catch (e) {
       setMessages((prev: ChatMessage[]) => [
@@ -182,13 +243,22 @@ export default function ScriptDetailPage() {
         {
           role: "assistant" as const,
           text: "",
-          error:
-            e instanceof Error ? e.message : "Erreur inconnue",
+          error: e instanceof Error ? e.message : "Erreur inconnue",
         },
       ]);
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const handleCancelClarification = () => {
+    setMessages((prev: ChatMessage[]) =>
+      prev.map((m) =>
+        m.clarification?.confirmed === null
+          ? { ...m, clarification: { ...m.clarification, confirmed: false } }
+          : m
+      )
+    );
   };
 
   const handleApply = async (message: string) => {
@@ -477,6 +547,8 @@ export default function ScriptDetailPage() {
             setSelectedFilename(filename);
             setPendingResult(result);
           }}
+          onConfirm={handleConfirm}
+          onCancelClarification={handleCancelClarification}
           prompt={prompt}
           onPromptChange={setPrompt}
         />

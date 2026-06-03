@@ -48,7 +48,7 @@ export default function LoginPage() {
 
       <main className="l-card relative z-10 w-full max-w-[410px] mx-4 rounded-[28px] px-5 sm:px-9 py-8 sm:py-11 text-center animate-fade-in">
         <div className="mb-9">
-          <h1 className="font-heading font-black leading-none tracking-tighter mb-2.5 text-4xl sm:text-5xl">
+          <h1 className="l-brand-title">
             <span className="brand-ex">Ex</span>
             <span className="brand-ref">Script</span>
           </h1>

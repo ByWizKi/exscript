@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.script import Script
 
-from .ai import ai_modify_script
+from .ai import ai_clarify_script, ai_modify_script
 from .crud import (
     add_version,
     create_script,
@@ -47,14 +47,24 @@ async def add_version_to_script(
     return await add_version(script_id, files, message, owner_email, db)
 
 
+async def clarify_ai_modification(
+    script_id: int,
+    prompt: str,
+    db: AsyncSession,
+    google_access_token: str | None = None,
+) -> dict:
+    return await ai_clarify_script(script_id, prompt, db, google_access_token)
+
+
 async def apply_ai_modification(
     script_id: int,
     prompt: str,
     db: AsyncSession,
     google_access_token: str | None = None,
     history: list | None = None,
+    base_files: list | None = None,
 ) -> dict:
-    return await ai_modify_script(script_id, prompt, db, google_access_token, history)
+    return await ai_modify_script(script_id, prompt, db, google_access_token, history, base_files)
 
 
 async def preview_pull(script_id: int, access_token: str, db: AsyncSession) -> list:
