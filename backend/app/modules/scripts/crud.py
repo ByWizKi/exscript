@@ -43,9 +43,10 @@ async def create_script(data: ScriptCreate, owner_email: str, db: AsyncSession) 
     return script
 
 
-async def list_scripts(db: AsyncSession) -> list[dict]:
+async def list_scripts(db: AsyncSession, owner_email: str) -> list[dict]:
     result = await db.execute(
         select(Script, func.count(ScriptVersion.id).label("version_count"))
+        .where(Script.owner_email == owner_email)
         .outerjoin(ScriptVersion, ScriptVersion.script_id == Script.id)
         .group_by(Script.id)
         .order_by(Script.created_at.desc())

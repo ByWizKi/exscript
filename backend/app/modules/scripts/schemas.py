@@ -103,6 +103,7 @@ class VersionCreate(BaseModel):
 class AIClarifyRequest(BaseModel):
     prompt: str
     google_access_token: str | None = None
+    history: list[ChatMessage] = []
 
 
 class AIClarifyResponse(BaseModel):

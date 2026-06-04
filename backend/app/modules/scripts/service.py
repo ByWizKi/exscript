@@ -27,8 +27,8 @@ async def get_script_or_none(script_id: int, db: AsyncSession) -> Script | None:
     return await get_script(script_id, db)
 
 
-async def list_all_scripts(db: AsyncSession) -> list[dict]:
-    return await list_scripts(db)
+async def list_all_scripts(db: AsyncSession, owner_email: str) -> list[dict]:
+    return await list_scripts(db, owner_email)
 
 
 async def update_script_fields(
@@ -52,8 +52,9 @@ async def clarify_ai_modification(
     prompt: str,
     db: AsyncSession,
     google_access_token: str | None = None,
+    history: list | None = None,
 ) -> dict:
-    return await ai_clarify_script(script_id, prompt, db, google_access_token)
+    return await ai_clarify_script(script_id, prompt, db, google_access_token, history)
 
 
 async def apply_ai_modification(
