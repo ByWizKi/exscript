@@ -270,10 +270,20 @@ Expected response (illustrative, not literal — only utils.gs is modified, Code
         result, _ = json.JSONDecoder().raw_decode(json_str)
     except json.JSONDecodeError as exc:
         raise ValueError(f"LLM JSON parse error: {exc}. Response: {raw[:200]}") from exc
+
+    def _infer_file_type(filename: str) -> str:
+        if filename.endswith(".html"):
+            return "html"
+        if filename.endswith(".json"):
+            return "json"
+        return "server_js"
+
     modified = {f["filename"]: f for f in result.get("files", [])}
     for f in modified.values():
         if "file_type" in f:
             f["file_type"] = f["file_type"].lower()
+        else:
+            f["file_type"] = _infer_file_type(f["filename"])
 
     # Merge: LLM only returns modified files, fill the rest from DB
     merged = []
