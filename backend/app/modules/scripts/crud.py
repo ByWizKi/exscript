@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.db.models.script import ChatMessage as ChatMessageModel
 from app.db.models.script import Script, ScriptFile, ScriptVersion
 
 from .schemas import ScriptCreate, ScriptUpdate
@@ -154,3 +155,40 @@ async def delete_script(script_id: int, db: AsyncSession) -> bool:
     await db.delete(script)
     await db.commit()
     return True
+
+
+async def save_chat_message(
+    script_id: int,
+    role: str,
+    content: str,
+    message_type: str,
+    db: AsyncSession,
+    metadata_json: dict | None = None,
+) -> ChatMessageModel:
+    msg = ChatMessageModel(
+        script_id=script_id,
+        role=role,
+        content=content,
+        message_type=message_type,
+        metadata_json=metadata_json,
+    )
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+    return msg
+
+
+async def get_chat_history(script_id: int, db: AsyncSession) -> list[ChatMessageModel]:
+    result = await db.execute(
+        select(ChatMessageModel)
+        .where(ChatMessageModel.script_id == script_id)
+        .order_by(ChatMessageModel.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def clear_chat_history(script_id: int, db: AsyncSession) -> None:
+    msgs = await db.execute(select(ChatMessageModel).where(ChatMessageModel.script_id == script_id))
+    for msg in msgs.scalars().all():
+        await db.delete(msg)
+    await db.commit()

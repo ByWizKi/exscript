@@ -90,9 +90,16 @@ class AIFileResult(BaseModel):
     file_type: str
 
 
+class AiStep(BaseModel):
+    type: str  # "generating" | "validating" | "fixing" | "done" | "warning"
+    message: str
+
+
 class AIModifyResponse(BaseModel):
     files: list[AIFileResult]
     version_message: str
+    steps: list[AiStep] = []
+    validation_warnings: list[str] = []
 
 
 class VersionCreate(BaseModel):
@@ -123,3 +130,14 @@ class ScriptUpdate(BaseModel):
     name: str | None = None
     gas_script_id: str | None = None
     spreadsheet_id: str | None = None
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str
+    content: str
+    message_type: str
+    metadata_json: dict | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
