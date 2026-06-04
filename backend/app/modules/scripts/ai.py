@@ -128,7 +128,7 @@ Règles générales :
         messages.append(LLMMessage(role=h.role, content=h.content))
     messages.append(LLMMessage(role="user", content=f"Demande de l'utilisateur : {prompt}"))
 
-    provider = get_provider(name="vertex", model="gemini-2.5-flash", api_key="")
+    provider = get_provider(name="vertex", model="gemini-2.5-pro", api_key="")
     raw = await provider.complete(messages)
 
     start = raw.find("{")
@@ -257,7 +257,7 @@ Expected response (illustrative, not literal — only utils.gs is modified, Code
         messages.append(LLMMessage(role=h.role, content=h.content))
     messages.append(LLMMessage(role="user", content=user_message))
 
-    provider = get_provider(name="vertex", model="gemini-2.5-flash", api_key="")
+    provider = get_provider(name="vertex", model="gemini-2.5-pro", api_key="")
     raw = await provider.complete(messages)
 
     start = raw.find("{")
