@@ -1,5 +1,3 @@
-import { signOut } from "next-auth/react";
-
 export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit
@@ -7,8 +5,7 @@ export async function apiFetch(
   const response = await fetch(input, init);
 
   if (response.status === 401) {
-    await signOut({ callbackUrl: "/login" });
-    // Return the response anyway so callers don't crash while redirect happens
+    window.dispatchEvent(new CustomEvent("session-expired"));
     return response;
   }
 
