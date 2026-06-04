@@ -5,7 +5,9 @@ import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .crud import get_script
+from .analyzer import analyze_gas_files
+from .crud import get_script, save_chat_message
+from .validator import validate_gas_files
 
 
 async def _fetch_sheets_context(spreadsheet_id: str, access_token: str) -> str:
@@ -40,7 +42,6 @@ async def _fetch_sheets_context(spreadsheet_id: str, access_token: str) -> str:
         for row in rows:
             cells = row.get("values", [])
             row_vals = [c.get("formattedValue", "") or "" for c in cells]
-            # Trim trailing empty cells
             while row_vals and row_vals[-1] == "":
                 row_vals.pop()
             if any(row_vals):
@@ -49,13 +50,11 @@ async def _fetch_sheets_context(spreadsheet_id: str, access_token: str) -> str:
         if not table_rows:
             continue
 
-        # First row as headers
         max_cols = max(len(r) for r in table_rows)
         headers = table_rows[0] + [""] * (max_cols - len(table_rows[0]))
         lines.append("Colonnes : " + " | ".join(headers))
         lines.append(f"Nombre de lignes de données : {len(table_rows) - 1}")
 
-        # Show up to 3 sample rows
         for row in table_rows[1:4]:
             row += [""] * (max_cols - len(row))
             lines.append("  " + " | ".join(row))
@@ -63,6 +62,18 @@ async def _fetch_sheets_context(spreadsheet_id: str, access_token: str) -> str:
             lines.append(f"  ... ({len(table_rows) - 4} lignes supplémentaires)")
 
     return "\n".join(lines)
+
+
+def _parse_llm_json(raw: str) -> dict:
+    start = raw.find("{")
+    if start == -1:
+        raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
+    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", raw[start:])
+    try:
+        result, _ = json.JSONDecoder().raw_decode(json_str)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM JSON parse error: {exc}. Response: {raw[:200]}") from exc
+    return result
 
 
 async def ai_clarify_script(
@@ -79,14 +90,19 @@ async def ai_clarify_script(
     if not script:
         raise ValueError("Script not found")
 
-    latest = script.versions[0] if script.versions else None
+    latest = script.versions[-1] if script.versions else None
     if not latest or not latest.files:
         raise ValueError("No files found in the latest version")
 
+    files_as_dicts = [
+        {"filename": f.filename, "content": f.content, "file_type": f.file_type}
+        for f in latest.files
+    ]
     file_list = ", ".join(f.filename for f in latest.files)
     files_context = "\n\n".join(
         f"### {f.filename}\n```javascript\n{f.content}\n```" for f in latest.files
     )
+    semantic_context = analyze_gas_files(files_as_dicts)
     project_name = script.name
 
     sheets_context = ""
@@ -102,6 +118,8 @@ Ton rôle ici est uniquement de COMPRENDRE et REFORMULER la demande de l'utilisa
 
 Projet : {project_name}
 Fichiers disponibles : {file_list}
+
+{semantic_context}
 
 Contenu actuel des fichiers :
 {files_context}{sheets_section}
@@ -128,20 +146,11 @@ Règles générales :
         messages.append(LLMMessage(role=h.role, content=h.content))
     messages.append(LLMMessage(role="user", content=f"Demande de l'utilisateur : {prompt}"))
 
-    provider = get_provider(name="vertex", model="gemini-2.5-flash", api_key="")
+    provider = get_provider(name="vertex", model="gemini-2.5-pro", api_key="")
     raw = await provider.complete(messages)
+    result = _parse_llm_json(raw)
 
-    start = raw.find("{")
-    if start == -1:
-        raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
-
-    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", raw[start:])
-    try:
-        result, _ = json.JSONDecoder().raw_decode(json_str)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"LLM JSON parse error: {exc}. Response: {raw[:200]}") from exc
-
-    return {
+    clarification = {
         "type": result.get("type", "modification"),
         "feasible": result.get("feasible", True),
         "reformulation": result.get("reformulation", ""),
@@ -149,6 +158,24 @@ Règles générales :
         "files_affected": result.get("files_affected", []),
         "plan": result.get("plan", []),
     }
+
+    await save_chat_message(
+        script_id=script_id,
+        role="user",
+        content=prompt,
+        message_type="user",
+        db=db,
+    )
+    await save_chat_message(
+        script_id=script_id,
+        role="assistant",
+        content="",
+        message_type="clarification",
+        db=db,
+        metadata_json=clarification,
+    )
+
+    return clarification
 
 
 async def ai_modify_script(
@@ -167,16 +194,18 @@ async def ai_modify_script(
         raise ValueError("Script not found")
 
     if base_files:
-        # Use provided files (previous AI result not yet saved) as the working base
         working_files = base_files
     else:
-        latest = script.versions[0] if script.versions else None
+        latest = script.versions[-1] if script.versions else None
         if not latest or not latest.files:
             raise ValueError("No files found in the latest version")
         working_files = [
             {"filename": f.filename, "content": f.content, "file_type": f.file_type}
             for f in latest.files
         ]
+
+    original_files = [dict(f) for f in working_files]
+    semantic_context = analyze_gas_files(working_files)
 
     files_context = "\n\n".join(
         f"### {f['filename']}\n```javascript\n{f['content']}\n```" for f in working_files
@@ -198,6 +227,8 @@ reason about the whole codebase before making any change.
 ## Your project context
 - Project name: {project_name}
 - Files ({file_count}): {file_list}
+
+{semantic_context}
 
 ## Google Apps Script constraints you must always respect
 - There is NO module system: no `import`, no `require`, no `export`. All `.gs` files share a \
@@ -245,31 +276,12 @@ Expected response (illustrative, not literal — only utils.gs is modified, Code
         else ""
     )
 
-    user_message = (
+    base_user_message = (
         f"Project files:\n\n{files_context}"
         f"{sheets_section}\n\n"
         f"User request: {prompt}\n\n"
         "Analyse the full codebase, then return the JSON with ONLY the modified files."
     )
-
-    messages: list[LLMMessage] = [LLMMessage(role="system", content=system_prompt)]
-    for h in history or []:
-        messages.append(LLMMessage(role=h.role, content=h.content))
-    messages.append(LLMMessage(role="user", content=user_message))
-
-    provider = get_provider(name="vertex", model="gemini-2.5-flash", api_key="")
-    raw = await provider.complete(messages)
-
-    start = raw.find("{")
-    if start == -1:
-        raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
-
-    # Fix invalid JSON escape sequences produced by LLM (e.g. \s \d \w in JS regex)
-    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", raw[start:])
-    try:
-        result, _ = json.JSONDecoder().raw_decode(json_str)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"LLM JSON parse error: {exc}. Response: {raw[:200]}") from exc
 
     def _infer_file_type(filename: str) -> str:
         if filename.endswith(".html"):
@@ -278,25 +290,187 @@ Expected response (illustrative, not literal — only utils.gs is modified, Code
             return "json"
         return "server_js"
 
+    def _merge_result(result: dict, source_files: list[dict]) -> list[dict]:
+        modified = {f["filename"]: f for f in result.get("files", [])}
+        for f in modified.values():
+            if "file_type" in f:
+                f["file_type"] = f["file_type"].lower()
+            else:
+                f["file_type"] = _infer_file_type(f["filename"])
+        merged = []
+        for original in source_files:
+            fname = original["filename"]
+            if fname in modified:
+                merged.append(modified[fname])
+            else:
+                merged.append(dict(original))
+        return merged
+
+    steps = []
+    provider = get_provider(name="vertex", model="gemini-2.5-pro", api_key="")
+
+    # Agentic loop: generate → validate → self-correct (max 3 attempts)
+    current_user_message = base_user_message
+    current_working_files = working_files
+    last_result: dict = {}
+    validation_warnings: list[str] = []
+
+    for attempt in range(1, 4):
+        steps.append({"type": "generating", "message": f"Génération {attempt}/3 en cours..."})
+
+        messages: list[LLMMessage] = [LLMMessage(role="system", content=system_prompt)]
+        for h in history or []:
+            messages.append(LLMMessage(role=h.role, content=h.content))
+        messages.append(LLMMessage(role="user", content=current_user_message))
+
+        raw = await provider.complete(messages)
+        last_result = _parse_llm_json(raw)
+        merged = _merge_result(last_result, current_working_files)
+
+        steps.append({"type": "validating", "message": "Validation GAS en cours..."})
+        violations = validate_gas_files(original_files, merged)
+
+        if not violations:
+            steps.append({"type": "done", "message": "Code validé sans erreur."})
+            last_result["files"] = merged
+            break
+
+        if attempt < 3:
+            steps.append(
+                {
+                    "type": "fixing",
+                    "message": f"Erreurs détectées ({len(violations)}), correction automatique...",
+                }
+            )
+            violations_text = "\n".join(f"- {v}" for v in violations)
+            current_user_message = (
+                f"{base_user_message}\n\n"
+                f"IMPORTANT: Your previous response had the following GAS validation errors:\n"
+                f"{violations_text}\n\n"
+                "Fix ALL of these issues and return the corrected JSON."
+            )
+        else:
+            # Last attempt failed — warn but keep the result
+            steps.append(
+                {
+                    "type": "warning",
+                    "message": f"{len(violations)} avertissement(s) GAS restant(s) après correction.",
+                }
+            )
+            validation_warnings = violations
+            last_result["files"] = merged
+
+    if not last_result.get("version_message"):
+        last_result["version_message"] = "Modification du script"
+
+    result_payload = {
+        "files": last_result["files"],
+        "version_message": last_result["version_message"],
+        "steps": steps,
+        "validation_warnings": validation_warnings,
+    }
+
+    await save_chat_message(
+        script_id=script_id,
+        role="assistant",
+        content="",
+        message_type="result",
+        db=db,
+        metadata_json=result_payload,
+    )
+
+    return result_payload
+
+
+async def ai_document_script(
+    script_id: int,
+    db: AsyncSession,
+    base_files: list | None = None,
+) -> dict:
+    """Generate JSDoc documentation for all undocumented functions."""
+    from app.llm.base import LLMMessage
+    from app.llm.factory import get_provider
+
+    script = await get_script(script_id, db)
+    if not script:
+        raise ValueError("Script not found")
+
+    if base_files:
+        working_files = base_files
+    else:
+        latest = script.versions[-1] if script.versions else None
+        if not latest or not latest.files:
+            raise ValueError("No files found in the latest version")
+        working_files = [
+            {"filename": f.filename, "content": f.content, "file_type": f.file_type}
+            for f in latest.files
+        ]
+
+    server_files = [f for f in working_files if f.get("file_type") in ("server_js", "SERVER_JS")]
+    if not server_files:
+        return {
+            "files": working_files,
+            "version_message": "Aucun fichier JS à documenter",
+            "steps": [{"type": "done", "message": "Aucun fichier JS trouvé."}],
+            "validation_warnings": [],
+        }
+
+    files_context = "\n\n".join(
+        f"### {f['filename']}\n```javascript\n{f['content']}\n```" for f in server_files
+    )
+    file_list = ", ".join(f["filename"] for f in server_files)
+
+    system_prompt = f"""You are an expert Google Apps Script (GAS) developer. \
+Your task is to add JSDoc documentation to all functions that are missing it.
+
+Rules:
+- Add `/** ... */` JSDoc comments above every undocumented function.
+- Include @param and @return tags with types and descriptions.
+- Keep existing comments and code unchanged — only ADD missing JSDoc blocks.
+- Return ONLY a raw JSON object with the documented files.
+- JSON structure: {{"files": [{{"filename": "...", "content": "...", "file_type": "server_js"}}], "version_message": "..."}}
+- Include ONLY files you actually modified.
+- `version_message`: one short French sentence.
+
+Files to document: {file_list}"""
+
+    messages: list[LLMMessage] = [
+        LLMMessage(role="system", content=system_prompt),
+        LLMMessage(
+            role="user",
+            content=f"Add JSDoc to all undocumented functions:\n\n{files_context}",
+        ),
+    ]
+
+    provider = get_provider(name="vertex", model="gemini-2.5-pro", api_key="")
+    raw = await provider.complete(messages)
+    result = _parse_llm_json(raw)
+
     modified = {f["filename"]: f for f in result.get("files", [])}
-    for f in modified.values():
-        if "file_type" in f:
-            f["file_type"] = f["file_type"].lower()
-        else:
-            f["file_type"] = _infer_file_type(f["filename"])
-
-    # Merge: LLM only returns modified files, fill the rest from DB
     merged = []
-    for original in working_files:
-        fname = original["filename"] if isinstance(original, dict) else original.filename
-        fcontent = original["content"] if isinstance(original, dict) else original.content
-        ftype = original["file_type"] if isinstance(original, dict) else original.file_type
+    for f in working_files:
+        fname = f["filename"]
         if fname in modified:
-            merged.append(modified[fname])
+            doc_file = modified[fname]
+            doc_file["file_type"] = doc_file.get("file_type", "server_js").lower()
+            merged.append(doc_file)
         else:
-            merged.append({"filename": fname, "content": fcontent, "file_type": ftype})
+            merged.append(dict(f))
 
-    result["files"] = merged
-    if not result.get("version_message"):
-        result["version_message"] = "Modification du script"
-    return result
+    doc_result = {
+        "files": merged,
+        "version_message": result.get("version_message", "Documentation JSDoc générée"),
+        "steps": [{"type": "done", "message": "Documentation JSDoc générée avec succès."}],
+        "validation_warnings": [],
+    }
+
+    await save_chat_message(
+        script_id=script_id,
+        role="assistant",
+        content="",
+        message_type="result",
+        db=db,
+        metadata_json=doc_result,
+    )
+
+    return doc_result

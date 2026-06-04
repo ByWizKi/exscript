@@ -19,6 +19,7 @@ import type {
   AiResult,
   AiClarification,
   ChatMessage,
+  ChatMessageDB,
 } from "../_detail/types";
 
 export default function ScriptDetailPage() {
@@ -76,9 +77,58 @@ export default function ScriptDetailPage() {
     }
   }, [id, session?.backendToken]);
 
+  const fetchChatHistory = useCallback(async () => {
+    if (!session?.backendToken) return;
+    try {
+      const res = await apiFetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/chat`,
+        { headers: { Authorization: `Bearer ${session.backendToken}` } }
+      );
+      if (!res.ok) return;
+      const history: ChatMessageDB[] = await res.json();
+      const loaded: ChatMessage[] = history.map((m) => {
+        if (m.role === "user") return { role: "user" as const, text: m.content };
+        if (m.message_type === "clarification" && m.metadata_json) {
+          const c = m.metadata_json as Record<string, unknown>;
+          return {
+            role: "assistant" as const,
+            text: "",
+            clarification: {
+              type: (c.type as "modification" | "explanation") ?? "modification",
+              feasible: (c.feasible as boolean) ?? true,
+              reformulation: (c.reformulation as string) ?? "",
+              explanation: (c.explanation as string) ?? "",
+              files_affected: (c.files_affected as string[]) ?? [],
+              plan: (c.plan as string[]) ?? [],
+              original_prompt: "",
+              confirmed: false,
+            } satisfies AiClarification,
+          };
+        }
+        if (m.message_type === "result" && m.metadata_json) {
+          const r = m.metadata_json as Record<string, unknown>;
+          const result = r as unknown as AiResult;
+          return {
+            role: "assistant" as const,
+            text: (r.version_message as string) ?? "",
+            result,
+          };
+        }
+        return { role: "assistant" as const, text: m.content };
+      });
+      setMessages(loaded);
+    } catch {
+      // ignore — history is best-effort
+    }
+  }, [id, session?.backendToken]);
+
   useEffect(() => {
     fetchScript();
   }, [fetchScript]);
+
+  useEffect(() => {
+    fetchChatHistory();
+  }, [fetchChatHistory]);
 
   const currentFiles = viewingVersion
     ? viewingVersion.files
@@ -261,6 +311,55 @@ export default function ScriptDetailPage() {
       ]);
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const handleDocument = async () => {
+    if (aiLoading || !session?.backendToken) return;
+    setAiLoading(true);
+    try {
+      const res = await apiFetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-document`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.backendToken}`,
+          },
+          body: JSON.stringify({ prompt: "", base_files: pendingResult?.files ?? null }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Erreur serveur");
+      const result: AiResult = data;
+      setPendingResult(result);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant" as const, text: result.version_message, result },
+      ]);
+    } catch (e) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant" as const, text: "", error: e instanceof Error ? e.message : "Erreur inconnue" },
+      ]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleClearChat = async () => {
+    if (!session?.backendToken) return;
+    try {
+      await apiFetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/chat`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.backendToken}` },
+        }
+      );
+      setMessages([]);
+    } catch {
+      // ignore
     }
   };
 
@@ -562,6 +661,8 @@ export default function ScriptDetailPage() {
           }}
           onConfirm={handleConfirm}
           onCancelClarification={handleCancelClarification}
+          onDocument={handleDocument}
+          onClearChat={handleClearChat}
           prompt={prompt}
           onPromptChange={setPrompt}
         />

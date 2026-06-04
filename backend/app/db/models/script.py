@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,11 @@ class Script(Base):
         back_populates="script",
         cascade="all, delete-orphan",
         order_by="ScriptVersion.version_number",
+    )
+    chat_messages: Mapped[list[ChatMessage]] = relationship(
+        back_populates="script",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.created_at",
     )
 
     @property
@@ -68,3 +73,22 @@ class ScriptFile(Base):
     file_type: Mapped[str] = mapped_column(String(50), default="server_js")
 
     version: Mapped[ScriptVersion] = relationship(back_populates="files")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    script_id: Mapped[int] = mapped_column(ForeignKey("scripts.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(20))  # "user" | "assistant"
+    # Plain text content for user messages; empty string for assistant clarification/result messages
+    content: Mapped[str] = mapped_column(Text, default="")
+    # Serialized AiClarification or AiResult depending on message_type
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # "user" | "clarification" | "result" | "error" | "step"
+    message_type: Mapped[str] = mapped_column(String(30), default="user")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    script: Mapped[Script] = relationship(back_populates="chat_messages")

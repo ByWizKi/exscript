@@ -14,6 +14,7 @@ from .schemas import (
     AIClarifyResponse,
     AIModifyRequest,
     AIModifyResponse,
+    ChatMessageOut,
     PushRequest,
     ScriptCreate,
     ScriptFileIn,
@@ -28,6 +29,8 @@ from .service import (
     clarify_ai_modification,
     create_script_and_fetch,
     delete_script_by_id,
+    document_script_with_ai,
+    get_chat_history_for_script,
     get_script_or_none,
     list_all_scripts,
     preview_pull,
@@ -35,6 +38,7 @@ from .service import (
     sync_pull,
     sync_push,
     update_script_fields,
+    wipe_chat_history,
 )
 
 router = APIRouter()
@@ -192,6 +196,41 @@ async def restore_version_endpoint(
         return await restore_version(script_id, version_id, email, db)
     except ValueError as err:
         raise HTTPException(status_code=404, detail=str(err)) from err
+
+
+@router.get("/{script_id}/chat", response_model=list[ChatMessageOut])
+async def get_chat_history_endpoint(
+    script_id: int,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    return await get_chat_history_for_script(script_id, db)
+
+
+@router.delete("/{script_id}/chat", status_code=204)
+async def clear_chat_history_endpoint(
+    script_id: int,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    await wipe_chat_history(script_id, db)
+
+
+@router.post("/{script_id}/ai-document", response_model=AIModifyResponse)
+async def ai_document_endpoint(
+    script_id: int,
+    body: AIModifyRequest,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+):
+    try:
+        base_files = [f.model_dump() for f in body.base_files] if body.base_files else None
+        return await document_script_with_ai(script_id, db, base_files)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    except Exception as err:
+        logging.getLogger(__name__).error("ai-document error: %s\n%s", err, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(err)) from err
 
 
 @router.post("/{script_id}/versions", response_model=ScriptOut, status_code=201)

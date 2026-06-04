@@ -30,9 +30,25 @@ export interface AiFile {
   file_type: string;
 }
 
+export interface AiStep {
+  type: "generating" | "validating" | "fixing" | "done" | "warning";
+  message: string;
+}
+
 export interface AiResult {
   files: AiFile[];
   version_message: string;
+  steps?: AiStep[];
+  validation_warnings?: string[];
+}
+
+export interface ChatMessageDB {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  message_type: "user" | "clarification" | "result" | "error";
+  metadata_json: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface AiClarification {

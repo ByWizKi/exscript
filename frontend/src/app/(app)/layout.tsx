@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Code2, Menu } from "lucide-react";
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { Sidebar } from "@/shared/components";
+import { Sidebar, SessionExpiredBanner } from "@/shared/components";
 
 const BackgroundOrbs = memo(function BackgroundOrbs() {
   return (
@@ -69,6 +69,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div
       className="fixed inset-0 flex z-50 app-bg"
     >
+      <SessionExpiredBanner />
       <BackgroundOrbs />
 
       <Sidebar

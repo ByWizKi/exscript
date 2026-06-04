@@ -4,11 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.script import Script
 
-from .ai import ai_clarify_script, ai_modify_script
+from .ai import ai_clarify_script, ai_document_script, ai_modify_script
 from .crud import (
     add_version,
+    clear_chat_history,
     create_script,
     delete_script,
+    get_chat_history,
     get_script,
     get_version,
     list_scripts,
@@ -78,6 +80,20 @@ async def sync_pull(script_id: int, access_token: str, email: str, db: AsyncSess
 
 async def sync_push(script_id: int, access_token: str, db: AsyncSession) -> None:
     return await push_to_gas(script_id, access_token, db)
+
+
+async def get_chat_history_for_script(script_id: int, db: AsyncSession) -> list:
+    return await get_chat_history(script_id, db)
+
+
+async def wipe_chat_history(script_id: int, db: AsyncSession) -> None:
+    await clear_chat_history(script_id, db)
+
+
+async def document_script_with_ai(
+    script_id: int, db: AsyncSession, base_files: list | None = None
+) -> dict:
+    return await ai_document_script(script_id, db, base_files)
 
 
 async def restore_version(

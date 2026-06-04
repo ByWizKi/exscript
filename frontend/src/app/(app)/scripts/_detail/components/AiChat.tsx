@@ -1,10 +1,18 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
-import { Loader2, Bot, Send, AlertCircle, Check, X, BookOpen } from "lucide-react";
+import {
+  Loader2, Bot, Send, AlertCircle, Check, X, BookOpen,
+  FileText, Trash2, ChevronRight, ChevronDown,
+} from "lucide-react";
 import { PromptLibrary } from "./PromptLibrary";
-import type { ChatMessage, ScriptFile, AiResult } from "../types";
+import type { ChatMessage, ScriptFile, AiResult, AiStep } from "../types";
+
+const MIN_WIDTH = 320;
+const MAX_WIDTH = 700;
+const DEFAULT_WIDTH = 420;
+const STORAGE_KEY = "exscript-aichat-width";
 
 interface AiChatProps {
   messages: ChatMessage[];
@@ -14,8 +22,45 @@ interface AiChatProps {
   onSelectFile?: (filename: string, result: AiResult) => void;
   onConfirm?: (originalPrompt: string) => void;
   onCancelClarification?: () => void;
+  onDocument?: () => void;
+  onClearChat?: () => void;
   prompt: string;
   onPromptChange: (text: string) => void;
+}
+
+function StepsAccordion({ steps }: { steps: AiStep[] }) {
+  const [open, setOpen] = useState(false);
+
+  const iconFor = (type: AiStep["type"]) => {
+    if (type === "done") return <Check className="h-3 w-3 text-green-500" />;
+    if (type === "warning") return <AlertCircle className="h-3 w-3 text-amber-400" />;
+    if (type === "generating") return <Loader2 className="h-3 w-3 animate-spin text-extia-night dark:text-extia-yellow" />;
+    return <ChevronRight className="h-3 w-3 text-slate-400 dark:text-white/40" />;
+  };
+
+  if (!steps?.length) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-slate-200 dark:border-white/10">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-white/40 hover:text-slate-600 dark:hover:text-white/60 transition-colors w-full"
+      >
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        {steps.length} étape{steps.length > 1 ? "s" : ""}
+      </button>
+      {open && (
+        <ol className="mt-1.5 space-y-1">
+          {steps.map((s, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-[10px] text-slate-500 dark:text-white/50">
+              <span className="flex-shrink-0 mt-0.5">{iconFor(s.type)}</span>
+              <span>{s.message}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
 }
 
 export function AiChat({
@@ -26,37 +71,115 @@ export function AiChat({
   onSelectFile,
   onConfirm,
   onCancelClarification,
+  onDocument,
+  onClearChat,
   prompt,
   onPromptChange,
 }: AiChatProps) {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [showPromptLibrary, setShowPromptLibrary] = useState(false);
 
+  const getInitialWidth = () => {
+    if (typeof window === "undefined") return DEFAULT_WIDTH;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const n = parseInt(stored, 10);
+      if (!isNaN(n) && n >= MIN_WIDTH && n <= MAX_WIDTH) return n;
+    }
+    return DEFAULT_WIDTH;
+  };
+
+  const [width, setWidth] = useState(getInitialWidth);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    dragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = width;
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+  }, [width]);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = startX.current - e.clientX; // drag left = wider
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth.current + delta));
+      setWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setWidth((w) => {
+        localStorage.setItem(STORAGE_KEY, String(w));
+        return w;
+      });
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, aiLoading]);
 
-  const handleSend = () => {
-    onSend(prompt);
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      handleSend();
+      onSend(prompt);
     }
   };
 
   return (
-    <aside className="w-80 flex-shrink-0 flex flex-col bg-slate-50 dark:bg-extia-night/20">
+    <aside
+      style={{ width }}
+      className="flex-shrink-0 flex flex-col bg-slate-50 dark:bg-extia-night/20 relative"
+    >
+      {/* Drag handle */}
+      <div
+        onMouseDown={onMouseDown}
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize z-10 hover:bg-extia-night/20 dark:hover:bg-extia-yellow/20 transition-colors"
+      />
+
+      {/* Header */}
       <div className="flex items-center gap-2 px-4 h-[38px] border-b border-slate-200 dark:border-white/10 flex-shrink-0">
         <div className="w-6 h-6 rounded-lg bg-extia-night dark:bg-extia-yellow flex items-center justify-center">
           <Bot className="h-3.5 w-3.5 text-white dark:text-extia-night" />
         </div>
-        <span className="font-heading font-bold text-extia-night dark:text-white text-sm">
+        <span className="font-heading font-bold text-extia-night dark:text-white text-sm flex-1">
           Assistant IA
         </span>
+        {onDocument && (
+          <button
+            onClick={onDocument}
+            disabled={aiLoading}
+            title="Générer la documentation JSDoc"
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-slate-200 dark:border-white/10 text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60 disabled:opacity-40 transition-colors"
+          >
+            <FileText className="h-3 w-3" />
+            Doc
+          </button>
+        )}
+        {onClearChat && messages.length > 0 && (
+          <button
+            onClick={onClearChat}
+            disabled={aiLoading}
+            title="Effacer l'historique"
+            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-slate-200 dark:border-white/10 text-slate-400 dark:text-white/30 hover:text-red-400 dark:hover:text-red-400 disabled:opacity-40 transition-colors"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
       </div>
 
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 space-y-4">
         {messages.length === 0 && !aiLoading && (
           <div className="py-6 space-y-4">
@@ -176,42 +299,33 @@ export function AiChat({
                   {msg.result && (
                     <div className="mt-2 pt-2 border-t border-slate-200 dark:border-white/10 space-y-1">
                       {msg.result.files.map((f) => {
-                        const orig = currentFiles.find(
-                          (cf) => cf.filename === f.filename
-                        )?.content;
+                        const orig = currentFiles.find((cf) => cf.filename === f.filename)?.content;
                         const changed = orig !== f.content;
                         return (
                           <button
                             key={f.filename}
-                            onClick={() => {
-                              onSelectFile?.(f.filename, msg.result!);
-                            }}
+                            onClick={() => onSelectFile?.(f.filename, msg.result!)}
                             className="flex items-center gap-1.5 w-full text-left hover:text-extia-night dark:hover:text-white transition-colors"
                           >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                changed
-                                  ? "bg-extia-night dark:bg-extia-yellow"
-                                  : "bg-slate-300 dark:bg-white/20"
-                              }`}
-                            />
-                            <span
-                              className={`text-[10px] font-mono ${
-                                changed
-                                  ? "text-extia-night dark:text-extia-yellow font-semibold"
-                                  : "text-slate-400 dark:text-white/40"
-                              }`}
-                            >
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${changed ? "bg-extia-night dark:bg-extia-yellow" : "bg-slate-300 dark:bg-white/20"}`} />
+                            <span className={`text-[10px] font-mono ${changed ? "text-extia-night dark:text-extia-yellow font-semibold" : "text-slate-400 dark:text-white/40"}`}>
                               {f.filename}
                             </span>
-                            {changed && (
-                              <span className="text-[9px] text-slate-400 dark:text-white/30">
-                                modifié
-                              </span>
-                            )}
+                            {changed && <span className="text-[9px] text-slate-400 dark:text-white/30">modifié</span>}
                           </button>
                         );
                       })}
+                    </div>
+                  )}
+                  {msg.result?.steps && <StepsAccordion steps={msg.result.steps} />}
+                  {msg.result?.validation_warnings && msg.result.validation_warnings.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-amber-400/20 space-y-1">
+                      {msg.result.validation_warnings.map((w, wi) => (
+                        <p key={wi} className="flex items-start gap-1 text-[10px] text-amber-500">
+                          <AlertCircle className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                          {w}
+                        </p>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -231,6 +345,7 @@ export function AiChat({
         <div ref={chatEndRef} />
       </div>
 
+      {/* Input */}
       <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-slate-200 dark:border-white/10">
         <div className="flex flex-col gap-2 relative">
           {showPromptLibrary && (
@@ -269,7 +384,7 @@ export function AiChat({
               </button>
             </div>
             <button
-              onClick={handleSend}
+              onClick={() => onSend(prompt)}
               disabled={!prompt.trim() || aiLoading}
               className="flex items-center gap-1.5 bg-extia-night dark:bg-extia-yellow hover:bg-extia-night/80 dark:hover:bg-extia-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed text-white dark:text-extia-night font-bold px-3 py-1.5 rounded-lg text-xs transition-colors"
             >
