@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.llm.base import LLMMessage
-from app.modules.scripts.ai import _fetch_sheets_context, ai_modify_script
+from app.modules.scripts.ai import (
+    _fetch_sheets_context,
+    ai_document_script_stream,
+    ai_modify_script,
+    ai_modify_script_stream,
+)
 from app.modules.scripts.crud import create_script
 from app.modules.scripts.schemas import ScriptCreate, ScriptFileIn
 
@@ -303,3 +308,261 @@ async def test_ai_modify_script_with_history(db):
             call_args = mock_provider.complete.call_args
             messages = call_args[0][0]
             assert len(messages) >= 3
+
+
+async def _collect_events(gen) -> list[dict]:
+    """Drainer un générateur async et retourner la liste des events."""
+    events = []
+    async for event in gen:
+        events.append(event)
+    return events
+
+
+@pytest.mark.asyncio
+async def test_ai_modify_stream_success_first_attempt(db):
+    """Succès au 1er tour : events step(generating), step(validating), step(done), result, done."""
+    data = ScriptCreate(
+        name="Stream Test",
+        gas_script_id="stream_id",
+        spreadsheet_id="sheet_stream",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    json_response = (
+        '{"files": [{"filename": "Code.js", "content": "modified",'
+        ' "file_type": "server_js"}], "version_message": "Done"}'
+    )
+
+    async def fake_stream(messages):
+        yield json_response
+
+    with patch("app.modules.scripts.ai._fetch_sheets_context", return_value=""):
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_provider.complete_stream = fake_stream
+            mock_get_provider.return_value = mock_provider
+
+            events = await _collect_events(
+                ai_modify_script_stream(script_id=script.id, prompt="change it", db=db)
+            )
+
+    event_types = [e["event"] for e in events]
+    assert "step" in event_types
+    assert "result" in event_types
+    assert "done" in event_types
+    assert "error" not in event_types
+
+    step_types = [e["data"]["type"] for e in events if e["event"] == "step"]
+    assert "generating" in step_types
+    assert "validating" in step_types
+
+    result_event = next(e for e in events if e["event"] == "result")
+    assert "files" in result_event["data"]
+    assert result_event["data"]["version_message"] == "Done"
+
+
+@pytest.mark.asyncio
+async def test_ai_modify_stream_with_correction(db):
+    """La boucle de correction produit un event step(fixing) au 2e tour."""
+    data = ScriptCreate(
+        name="Correction Test",
+        gas_script_id="corr_id",
+        spreadsheet_id="sheet_corr",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    bad_response = (
+        '{"files": [{"filename": "Code.js", "content": "console.log(1)",'
+        ' "file_type": "server_js"}], "version_message": "v1"}'
+    )
+    good_response = (
+        '{"files": [{"filename": "Code.js", "content": "Logger.log(1)",'
+        ' "file_type": "server_js"}], "version_message": "v2"}'
+    )
+
+    call_count = 0
+
+    async def fake_stream(messages):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            yield bad_response
+        else:
+            yield good_response
+
+    with patch("app.modules.scripts.ai._fetch_sheets_context", return_value=""):
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_provider.complete_stream = fake_stream
+            mock_get_provider.return_value = mock_provider
+
+            events = await _collect_events(
+                ai_modify_script_stream(script_id=script.id, prompt="log something", db=db)
+            )
+
+    step_types = [e["data"]["type"] for e in events if e["event"] == "step"]
+    assert "fixing" in step_types
+    assert "error" not in [e["event"] for e in events]
+
+
+@pytest.mark.asyncio
+async def test_ai_modify_stream_llm_error(db):
+    """Erreur LLM → event error émis, pas de event result."""
+    data = ScriptCreate(
+        name="Error Test",
+        gas_script_id="err_id",
+        spreadsheet_id="sheet_err",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    async def fake_stream_error(messages):
+        raise RuntimeError("LLM unavailable")
+        yield  # make it a generator
+
+    with patch("app.modules.scripts.ai._fetch_sheets_context", return_value=""):
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_provider.complete_stream = fake_stream_error
+            mock_get_provider.return_value = mock_provider
+
+            events = await _collect_events(
+                ai_modify_script_stream(script_id=script.id, prompt="test", db=db)
+            )
+
+    event_types = [e["event"] for e in events]
+    assert "error" in event_types
+    assert "result" not in event_types
+
+    error_event = next(e for e in events if e["event"] == "error")
+    assert "LLM unavailable" in error_event["data"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_ai_modify_stream_invalid_json(db):
+    """JSON invalide du LLM → event error avec message lisible."""
+    data = ScriptCreate(
+        name="BadJSON Test",
+        gas_script_id="json_err_id",
+        spreadsheet_id="sheet_json_err",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    async def fake_stream_bad_json(messages):
+        yield "this is not json at all"
+
+    with patch("app.modules.scripts.ai._fetch_sheets_context", return_value=""):
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_provider.complete_stream = fake_stream_bad_json
+            mock_get_provider.return_value = mock_provider
+
+            events = await _collect_events(
+                ai_modify_script_stream(script_id=script.id, prompt="test", db=db)
+            )
+
+    event_types = [e["event"] for e in events]
+    assert "error" in event_types
+    assert "result" not in event_types
+
+
+@pytest.mark.asyncio
+async def test_ai_modify_stream_not_found(db):
+    """Script introuvable → event error."""
+    events = await _collect_events(ai_modify_script_stream(script_id=99999, prompt="test", db=db))
+    assert any(e["event"] == "error" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_ai_modify_stream_event_order(db):
+    """L'event generating doit précéder validating, qui précède result."""
+    data = ScriptCreate(
+        name="Order Test",
+        gas_script_id="order_id",
+        spreadsheet_id="sheet_order",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    json_response = (
+        '{"files": [{"filename": "Code.js", "content": "ok",'
+        ' "file_type": "server_js"}], "version_message": "ok"}'
+    )
+
+    async def fake_stream(messages):
+        yield json_response
+
+    with patch("app.modules.scripts.ai._fetch_sheets_context", return_value=""):
+        with patch("app.llm.factory.get_provider") as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_provider.complete_stream = fake_stream
+            mock_get_provider.return_value = mock_provider
+
+            events = await _collect_events(
+                ai_modify_script_stream(script_id=script.id, prompt="test", db=db)
+            )
+
+    indexed = [(i, e) for i, e in enumerate(events)]
+    generating_idx = next(
+        i for i, e in indexed if e["event"] == "step" and e["data"]["type"] == "generating"
+    )
+    validating_idx = next(
+        i for i, e in indexed if e["event"] == "step" and e["data"]["type"] == "validating"
+    )
+    result_idx = next(i for i, e in indexed if e["event"] == "result")
+
+    assert generating_idx < validating_idx < result_idx
+
+
+@pytest.mark.asyncio
+async def test_ai_document_stream_success(db):
+    """ai_document_script_stream produit result + done."""
+    data = ScriptCreate(
+        name="Doc Stream Test",
+        gas_script_id="doc_stream_id",
+        spreadsheet_id="sheet_doc",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    json_response = (
+        '{"files": [{"filename": "Code.js",'
+        ' "content": "/** @return {void} */\\nfunction f(){}",'
+        ' "file_type": "server_js"}], "version_message": "JSDoc added"}'
+    )
+
+    async def fake_stream(messages):
+        yield json_response
+
+    with patch("app.llm.factory.get_provider") as mock_get_provider:
+        mock_provider = MagicMock()
+        mock_provider.complete_stream = fake_stream
+        mock_get_provider.return_value = mock_provider
+
+        events = await _collect_events(ai_document_script_stream(script_id=script.id, db=db))
+
+    event_types = [e["event"] for e in events]
+    assert "result" in event_types
+    assert "done" in event_types
+    assert "error" not in event_types
+
+
+@pytest.mark.asyncio
+async def test_ai_document_stream_no_js_files(db):
+    """Aucun fichier JS → event result immédiat avec message spécial."""
+    data = ScriptCreate(
+        name="No JS Test",
+        gas_script_id="no_js_id",
+        spreadsheet_id="sheet_no_js",
+        files=[ScriptFileIn(filename="index.html", content="<html/>", file_type="html")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    events = await _collect_events(ai_document_script_stream(script_id=script.id, db=db))
+
+    event_types = [e["event"] for e in events]
+    assert "result" in event_types
+    assert "error" not in event_types
