@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.script import Script
 
-from .ai import ai_clarify_script, ai_document_script, ai_modify_script
+from .ai import (
+    ai_clarify_script,
+    ai_document_script,
+    ai_document_script_stream,
+    ai_modify_script,
+    ai_modify_script_stream,
+)
 from .crud import (
     add_version,
     clear_chat_history,
@@ -94,6 +102,23 @@ async def document_script_with_ai(
     script_id: int, db: AsyncSession, base_files: list | None = None
 ) -> dict:
     return await ai_document_script(script_id, db, base_files)
+
+
+def stream_ai_modification(
+    script_id: int,
+    prompt: str,
+    db: AsyncSession,
+    google_access_token: str | None = None,
+    history: list | None = None,
+    base_files: list | None = None,
+) -> AsyncIterator[dict]:
+    return ai_modify_script_stream(script_id, prompt, db, google_access_token, history, base_files)
+
+
+def stream_ai_document(
+    script_id: int, db: AsyncSession, base_files: list | None = None
+) -> AsyncIterator[dict]:
+    return ai_document_script_stream(script_id, db, base_files)
 
 
 async def restore_version(

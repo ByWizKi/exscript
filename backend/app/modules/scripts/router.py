@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import traceback
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_email
@@ -35,6 +39,8 @@ from .service import (
     list_all_scripts,
     preview_pull,
     restore_version,
+    stream_ai_document,
+    stream_ai_modification,
     sync_pull,
     sync_push,
     update_script_fields,
@@ -42,6 +48,45 @@ from .service import (
 )
 
 router = APIRouter()
+
+_HEARTBEAT_INTERVAL = 15  # secondes
+
+
+async def _sse_stream(event_gen: AsyncIterator[dict]) -> AsyncIterator[str]:
+    """Transforme un générateur d'événements en flux SSE avec heartbeat."""
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def feed() -> None:
+        try:
+            async for event in event_gen:
+                name = event.get("event", "message")
+                data = json.dumps({k: v for k, v in event.items() if k != "event"})
+                await queue.put(f"event: {name}\ndata: {data}\n\n")
+        except Exception as exc:
+            data = json.dumps({"message": str(exc)})
+            await queue.put(f"event: error\ndata: {data}\n\n")
+        finally:
+            await queue.put(None)
+
+    async def heartbeat() -> None:
+        while True:
+            await asyncio.sleep(_HEARTBEAT_INTERVAL)
+            await queue.put("event: ping\ndata: {}\n\n")
+
+    feed_task = asyncio.create_task(feed())
+    hb_task = asyncio.create_task(heartbeat())
+    try:
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield item
+    finally:
+        hb_task.cancel()
+        feed_task.cancel()
+        if hasattr(event_gen, "aclose"):
+            await event_gen.aclose()
+        await asyncio.gather(feed_task, hb_task, return_exceptions=True)
 
 
 @router.get("", response_model=list[ScriptListItem])
@@ -231,6 +276,40 @@ async def ai_document_endpoint(
     except Exception as err:
         logging.getLogger(__name__).error("ai-document error: %s\n%s", err, traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(err)) from err
+
+
+@router.post("/{script_id}/ai-modify-stream")
+async def ai_modify_stream_endpoint(
+    script_id: int,
+    body: AIModifyRequest,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+) -> StreamingResponse:
+    base_files = [f.model_dump() for f in body.base_files] if body.base_files else None
+    gen = stream_ai_modification(
+        script_id, body.prompt, db, body.google_access_token, body.history, base_files
+    )
+    return StreamingResponse(
+        _sse_stream(gen),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/{script_id}/ai-document-stream")
+async def ai_document_stream_endpoint(
+    script_id: int,
+    body: AIModifyRequest,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    _: str = Depends(get_current_email),
+) -> StreamingResponse:
+    base_files = [f.model_dump() for f in body.base_files] if body.base_files else None
+    gen = stream_ai_document(script_id, db, base_files)
+    return StreamingResponse(
+        _sse_stream(gen),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/{script_id}/versions", response_model=ScriptOut, status_code=201)

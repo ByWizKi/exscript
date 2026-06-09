@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from google import genai
 from google.genai import types
 
@@ -35,3 +37,7 @@ class GeminiProvider(LLMProvider):
             config=config,
         )
         return response.text
+
+    async def complete_stream(self, messages: list[LLMMessage]) -> AsyncIterator[str]:
+        result = await self.complete(messages)
+        yield result

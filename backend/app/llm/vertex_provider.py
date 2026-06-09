@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from google import genai
 from google.genai import types
 
@@ -17,7 +19,7 @@ class VertexProvider(LLMProvider):
         )
         self._model = model
 
-    async def complete(self, messages: list[LLMMessage]) -> str:
+    async def complete_stream(self, messages: list[LLMMessage]) -> AsyncIterator[str]:
         system_parts = [m.content for m in messages if m.role == "system"]
         system_instruction = "\n\n".join(system_parts) if system_parts else None
 
@@ -35,14 +37,16 @@ class VertexProvider(LLMProvider):
             system_instruction=system_instruction,
         )
 
-        import asyncio
+        async for chunk in self._client.aio.models.generate_content_stream(
+            model=self._model,
+            contents=contents,
+            config=config,
+        ):
+            if chunk.text:
+                yield chunk.text
 
-        response = await asyncio.wait_for(
-            self._client.aio.models.generate_content(
-                model=self._model,
-                contents=contents,
-                config=config,
-            ),
-            timeout=120,
-        )
-        return response.text
+    async def complete(self, messages: list[LLMMessage]) -> str:
+        parts: list[str] = []
+        async for chunk in self.complete_stream(messages):
+            parts.append(chunk)
+        return "".join(parts)
