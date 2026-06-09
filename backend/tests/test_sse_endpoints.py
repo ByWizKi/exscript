@@ -135,6 +135,30 @@ async def test_sse_content_type(client):
 
 
 @pytest.mark.asyncio
+async def test_sse_ping_event_passes_through(client):
+    """Les événements ping (heartbeat) sont bien transmis dans le flux SSE."""
+    from unittest.mock import patch
+
+    with patch(
+        "app.modules.scripts.router.stream_ai_modification",
+        return_value=_make_sse_events(
+            {"event": "ping"},
+            {"event": "done"},
+        ),
+    ):
+        response = await client.post(
+            "/scripts/1/ai-modify-stream",
+            json={"prompt": "x", "google_access_token": None},
+            headers=_auth_headers(),
+        )
+
+    assert response.status_code == 200
+    parsed = _parse_sse(response.text)
+    assert any(e["event"] == "ping" for e in parsed)
+    assert any(e["event"] == "done" for e in parsed)
+
+
+@pytest.mark.asyncio
 async def test_sse_wire_format(client):
     """Vérifie que le format SSE respecte event:/data: sur lignes séparées."""
     from unittest.mock import patch

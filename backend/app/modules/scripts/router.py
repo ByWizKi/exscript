@@ -82,8 +82,11 @@ async def _sse_stream(event_gen: AsyncIterator[dict]) -> AsyncIterator[str]:
                 break
             yield item
     finally:
-        feed_task.cancel()
         hb_task.cancel()
+        feed_task.cancel()
+        if hasattr(event_gen, "aclose"):
+            await event_gen.aclose()
+        await asyncio.gather(feed_task, hb_task, return_exceptions=True)
 
 
 @router.get("", response_model=list[ScriptListItem])

@@ -566,6 +566,39 @@ describe('AiChat Component', () => {
     expect(nightIndicators.length).toBeGreaterThan(0);
   });
 
+  it('shows aiStep message instead of default when aiLoading is true and aiStep is set', () => {
+    render(
+      <AiChat
+        messages={[]}
+        aiLoading={true}
+        aiStep="Génération en cours…"
+        currentFiles={mockFiles}
+        onSend={mockOnSend}
+        onSelectFile={mockOnSelectFile}
+        prompt=""
+        onPromptChange={mockOnPromptChange}
+      />
+    );
+    expect(screen.getByText('Génération en cours…')).toBeInTheDocument();
+    expect(screen.queryByText('Traitement en cours…')).not.toBeInTheDocument();
+  });
+
+  it('shows default loading message when aiLoading is true and aiStep is null', () => {
+    render(
+      <AiChat
+        messages={[]}
+        aiLoading={true}
+        aiStep={null}
+        currentFiles={mockFiles}
+        onSend={mockOnSend}
+        onSelectFile={mockOnSelectFile}
+        prompt=""
+        onPromptChange={mockOnPromptChange}
+      />
+    );
+    expect(screen.getByText('Traitement en cours…')).toBeInTheDocument();
+  });
+
   it('does not show send button as loading when aiLoading is false', () => {
     render(
       <AiChat
