@@ -17,6 +17,7 @@ const STORAGE_KEY = "exscript-aichat-width";
 interface AiChatProps {
   messages: ChatMessage[];
   aiLoading: boolean;
+  aiStep?: string | null;
   currentFiles: ScriptFile[];
   onSend: (prompt: string) => void;
   onSelectFile?: (filename: string, result: AiResult) => void;
@@ -66,6 +67,7 @@ function StepsAccordion({ steps }: { steps: AiStep[] }) {
 export function AiChat({
   messages,
   aiLoading,
+  aiStep,
   currentFiles,
   onSend,
   onSelectFile,
@@ -338,7 +340,9 @@ export function AiChat({
           <div className="flex justify-start">
             <div className="bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-extia-night dark:text-extia-yellow" />
-              <span className="text-slate-400 dark:text-white/40 text-xs">Traitement en cours…</span>
+              <span className="text-slate-400 dark:text-white/40 text-xs">
+                {aiStep ?? "Traitement en cours…"}
+              </span>
             </div>
           </div>
         )}

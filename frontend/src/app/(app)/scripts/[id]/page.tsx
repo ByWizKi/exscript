@@ -49,6 +49,7 @@ export default function ScriptDetailPage() {
   const [sidebarTab, setSidebarTab] = useState<"files" | "history">("files");
   const [viewingVersion, setViewingVersion] = useState<ScriptVersion | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [aiStep, setAiStep] = useState<string | null>(null);
 
   const fetchScript = useCallback(async () => {
     if (!session?.backendToken) { setLoading(false); return; }
@@ -174,6 +175,62 @@ export default function ScriptDetailPage() {
     }
   };
 
+  const readSseStream = async (
+    url: string,
+    body: Record<string, unknown>,
+    token: string
+  ): Promise<AiResult> => {
+    const res = await apiFetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok || !res.body) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error((d as { detail?: string }).detail ?? "Erreur serveur");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let result: AiResult | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const blocks = buffer.split("\n\n");
+      buffer = blocks.pop() ?? "";
+
+      for (const block of blocks) {
+        let eventName = "";
+        let dataStr = "";
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event:")) eventName = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataStr = line.slice(5).trim();
+        }
+        if (!dataStr) continue;
+        const payload = JSON.parse(dataStr) as Record<string, unknown>;
+
+        if (eventName === "step") {
+          setAiStep((payload.message as string) ?? null);
+        } else if (eventName === "result") {
+          result = payload as unknown as AiResult;
+        } else if (eventName === "error") {
+          throw new Error((payload.message as string) ?? "Erreur IA");
+        }
+      }
+    }
+
+    if (!result) throw new Error("Aucun résultat reçu");
+    return result;
+  };
+
   const handleSend = async (overridePrompt?: string) => {
     const text = (overridePrompt ?? prompt).trim();
     if (!text || aiLoading || !session?.backendToken) return;
@@ -257,6 +314,7 @@ export default function ScriptDetailPage() {
       )
     );
     setAiLoading(true);
+    setAiStep(null);
 
     try {
       const history = messages
@@ -268,27 +326,17 @@ export default function ScriptDetailPage() {
             : m.text,
         }));
 
-      const res = await apiFetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-modify`,
+      const result = await readSseStream(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-modify-stream`,
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.backendToken}`,
-          },
-          body: JSON.stringify({
-            prompt: originalPrompt,
-            google_access_token: session.googleAccessToken,
-            history,
-            base_files: pendingResult?.files ?? null,
-          }),
-        }
+          prompt: originalPrompt,
+          google_access_token: session.googleAccessToken,
+          history,
+          base_files: pendingResult?.files ?? null,
+        },
+        session.backendToken
       );
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Erreur serveur");
-
-      const result: AiResult = data;
       setPendingResult(result);
 
       const firstMod = result.files.find(
@@ -311,27 +359,20 @@ export default function ScriptDetailPage() {
       ]);
     } finally {
       setAiLoading(false);
+      setAiStep(null);
     }
   };
 
   const handleDocument = async () => {
     if (aiLoading || !session?.backendToken) return;
     setAiLoading(true);
+    setAiStep(null);
     try {
-      const res = await apiFetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-document`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.backendToken}`,
-          },
-          body: JSON.stringify({ prompt: "", base_files: pendingResult?.files ?? null }),
-        }
+      const result = await readSseStream(
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-document-stream`,
+        { prompt: "", base_files: pendingResult?.files ?? null },
+        session.backendToken
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Erreur serveur");
-      const result: AiResult = data;
       setPendingResult(result);
       setMessages((prev) => [
         ...prev,
@@ -344,6 +385,7 @@ export default function ScriptDetailPage() {
       ]);
     } finally {
       setAiLoading(false);
+      setAiStep(null);
     }
   };
 
@@ -653,6 +695,7 @@ export default function ScriptDetailPage() {
         <AiChat
           messages={messages}
           aiLoading={aiLoading}
+          aiStep={aiStep}
           currentFiles={currentFiles}
           onSend={handleSend}
           onSelectFile={(filename, result) => {
