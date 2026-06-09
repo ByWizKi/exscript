@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from openai import AsyncOpenAI
 
 from .base import LLMMessage, LLMProvider
@@ -17,3 +19,7 @@ class OpenAIProvider(LLMProvider):
             temperature=0,
         )
         return response.choices[0].message.content or ""
+
+    async def complete_stream(self, messages: list[LLMMessage]) -> AsyncIterator[str]:
+        result = await self.complete(messages)
+        yield result

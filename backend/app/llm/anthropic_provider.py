@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from anthropic import AsyncAnthropic
 
 from .base import LLMMessage, LLMProvider
@@ -23,3 +25,7 @@ class AnthropicProvider(LLMProvider):
             messages=user_messages,
         )
         return response.content[0].text
+
+    async def complete_stream(self, messages: list[LLMMessage]) -> AsyncIterator[str]:
+        result = await self.complete(messages)
+        yield result

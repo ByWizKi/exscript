@@ -8,6 +8,7 @@ from app.llm.anthropic_provider import AnthropicProvider
 from app.llm.base import LLMMessage
 from app.llm.gemini_provider import GeminiProvider
 from app.llm.openai_provider import OpenAIProvider
+from app.llm.vertex_provider import VertexProvider
 
 
 class TestAnthropicProvider:
@@ -115,6 +116,139 @@ class TestOpenAIProvider:
             result = await provider.complete(messages)
 
             assert result == ""
+
+
+class TestVertexProviderStream:
+    @patch("app.llm.vertex_provider.genai")
+    @patch("app.llm.vertex_provider.settings")
+    @pytest.mark.asyncio
+    async def test_complete_stream_yields_chunks(self, mock_settings, mock_genai):
+        mock_settings.vertex_project_id = "test-project"
+        mock_settings.vertex_location = "europe-west1"
+
+        mock_client = AsyncMock()
+        mock_genai.Client.return_value = mock_client
+
+        async def fake_stream(*args, **kwargs):
+            for text in ["chunk1", "chunk2", "chunk3"]:
+                chunk = Mock()
+                chunk.text = text
+                yield chunk
+
+        mock_client.aio.models.generate_content_stream = fake_stream
+
+        provider = VertexProvider(model="gemini-2.5-pro")
+        messages = [
+            LLMMessage(role="system", content="You are helpful"),
+            LLMMessage(role="user", content="Hello"),
+        ]
+
+        chunks = []
+        async for chunk in provider.complete_stream(messages):
+            chunks.append(chunk)
+
+        assert chunks == ["chunk1", "chunk2", "chunk3"]
+
+    @patch("app.llm.vertex_provider.genai")
+    @patch("app.llm.vertex_provider.settings")
+    @pytest.mark.asyncio
+    async def test_complete_stream_skips_empty_chunks(self, mock_settings, mock_genai):
+        mock_settings.vertex_project_id = "test-project"
+        mock_settings.vertex_location = "europe-west1"
+
+        mock_client = AsyncMock()
+        mock_genai.Client.return_value = mock_client
+
+        async def fake_stream(*args, **kwargs):
+            for text in ["hello", "", None, " ", "world"]:
+                chunk = Mock()
+                chunk.text = text
+                yield chunk
+
+        mock_client.aio.models.generate_content_stream = fake_stream
+
+        provider = VertexProvider(model="gemini-2.5-pro")
+        messages = [LLMMessage(role="user", content="Hi")]
+
+        chunks = []
+        async for chunk in provider.complete_stream(messages):
+            chunks.append(chunk)
+
+        assert chunks == ["hello", " ", "world"]
+
+    @patch("app.llm.vertex_provider.genai")
+    @patch("app.llm.vertex_provider.settings")
+    @pytest.mark.asyncio
+    async def test_complete_uses_stream_internally(self, mock_settings, mock_genai):
+        """complete() doit assembler les chunks de complete_stream()."""
+        mock_settings.vertex_project_id = "test-project"
+        mock_settings.vertex_location = "europe-west1"
+
+        mock_client = AsyncMock()
+        mock_genai.Client.return_value = mock_client
+
+        async def fake_stream(*args, **kwargs):
+            for text in ["part1", " ", "part2"]:
+                chunk = Mock()
+                chunk.text = text
+                yield chunk
+
+        mock_client.aio.models.generate_content_stream = fake_stream
+
+        provider = VertexProvider(model="gemini-2.5-pro")
+        messages = [LLMMessage(role="user", content="Hello")]
+
+        result = await provider.complete(messages)
+        assert result == "part1 part2"
+
+    @patch("app.llm.vertex_provider.genai")
+    @patch("app.llm.vertex_provider.settings")
+    @pytest.mark.asyncio
+    async def test_complete_stream_propagates_error(self, mock_settings, mock_genai):
+        mock_settings.vertex_project_id = "test-project"
+        mock_settings.vertex_location = "europe-west1"
+
+        mock_client = AsyncMock()
+        mock_genai.Client.return_value = mock_client
+
+        async def fake_stream_error(*args, **kwargs):
+            yield Mock(text="first chunk")
+            raise RuntimeError("network error mid-stream")
+
+        mock_client.aio.models.generate_content_stream = fake_stream_error
+
+        provider = VertexProvider(model="gemini-2.5-pro")
+        messages = [LLMMessage(role="user", content="Hello")]
+
+        with pytest.raises(RuntimeError, match="network error mid-stream"):
+            async for _ in provider.complete_stream(messages):
+                pass
+
+
+class TestLLMProviderFallbackStream:
+    """Les providers non-Vertex doivent streamer via complete() en fallback."""
+
+    @pytest.mark.asyncio
+    async def test_anthropic_complete_stream_fallback(self):
+        provider = AnthropicProvider(api_key="test", model="claude-3-opus")
+        with patch.object(provider, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = "full response"
+            chunks = []
+            async for chunk in provider.complete_stream([LLMMessage(role="user", content="hi")]):
+                chunks.append(chunk)
+            assert chunks == ["full response"]
+
+    @patch("app.llm.gemini_provider.genai")
+    @pytest.mark.asyncio
+    async def test_gemini_complete_stream_fallback(self, mock_genai):
+        mock_genai.Client.return_value = Mock()
+        provider = GeminiProvider(api_key="test", model="gemini-pro")
+        with patch.object(provider, "complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = "gemini full response"
+            chunks = []
+            async for chunk in provider.complete_stream([LLMMessage(role="user", content="hi")]):
+                chunks.append(chunk)
+            assert chunks == ["gemini full response"]
 
 
 class TestGeminiProvider:
