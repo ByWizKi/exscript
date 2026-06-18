@@ -37,11 +37,13 @@ class VertexProvider(LLMProvider):
             system_instruction=system_instruction,
         )
 
-        async for chunk in self._client.aio.models.generate_content_stream(
+        # generate_content_stream est une coroutine qui retourne un AsyncIterator
+        stream = await self._client.aio.models.generate_content_stream(
             model=self._model,
             contents=contents,
             config=config,
-        ):
+        )
+        async for chunk in stream:
             if chunk.text:
                 yield chunk.text
 
