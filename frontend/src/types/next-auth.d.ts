@@ -5,6 +5,7 @@ declare module "next-auth" {
   interface Session {
     backendToken: string;
     googleAccessToken: string;
+    error?: string;
   }
 }
 
@@ -12,6 +13,8 @@ declare module "next-auth/jwt" {
   interface JWT {
     backendToken?: string;
     googleAccessToken?: string;
+    googleRefreshToken?: string;
+    googleTokenExpiresAt?: number;
     user?: Record<string, unknown>;
     error?: string;
   }
