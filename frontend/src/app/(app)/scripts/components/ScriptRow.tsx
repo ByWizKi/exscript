@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { GitBranch, Clock, MoreHorizontal } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
@@ -22,6 +25,7 @@ interface Props {
 }
 
 export function ScriptRow({ script, onEdit, mobile = false }: Props) {
+  const router = useRouter();
   const status = script.latest_status ?? "draft";
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
   const date = new Date(script.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
@@ -56,13 +60,14 @@ export function ScriptRow({ script, onEdit, mobile = false }: Props) {
   }
 
   return (
-    <tr className="border-b border-slate-100 dark:border-white/[0.05] hover:bg-extia-yellow/[0.02] dark:hover:bg-white/[0.02] transition-colors group">
+    <tr
+      onClick={() => router.push(`/scripts/${script.id}`)}
+      className="border-b border-slate-100 dark:border-white/[0.05] hover:bg-extia-yellow/[0.02] dark:hover:bg-white/[0.02] transition-colors group cursor-pointer"
+    >
       <td className="py-3 px-4">
-        <Link href={`/scripts/${script.id}`} className="block">
-          <p className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[220px] hover:text-extia-yellow transition-colors">
-            {script.name}
-          </p>
-        </Link>
+        <p className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[220px] group-hover:text-extia-yellow transition-colors">
+          {script.name}
+        </p>
       </td>
       <td className="py-3 px-4">
         <span className="text-xs font-mono text-slate-400 dark:text-white/30 truncate max-w-[160px] block">{script.gas_script_id}</span>
@@ -82,7 +87,7 @@ export function ScriptRow({ script, onEdit, mobile = false }: Props) {
       </td>
       <td className="py-3 px-4">
         <button
-          onClick={(e) => { e.preventDefault(); onEdit(); }}
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
           className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 dark:text-white/30 hover:text-slate-700 dark:hover:text-white/60 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors opacity-0 group-hover:opacity-100"
           title="Modifier"
         >

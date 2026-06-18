@@ -129,11 +129,14 @@ class TestVertexProviderStream:
         mock_client = AsyncMock()
         mock_genai.Client.return_value = mock_client
 
-        async def fake_stream(*args, **kwargs):
+        async def _gen():
             for text in ["chunk1", "chunk2", "chunk3"]:
                 chunk = Mock()
                 chunk.text = text
                 yield chunk
+
+        async def fake_stream(*args, **kwargs):
+            return _gen()
 
         mock_client.aio.models.generate_content_stream = fake_stream
 
@@ -159,11 +162,14 @@ class TestVertexProviderStream:
         mock_client = AsyncMock()
         mock_genai.Client.return_value = mock_client
 
-        async def fake_stream(*args, **kwargs):
+        async def _gen():
             for text in ["hello", "", None, " ", "world"]:
                 chunk = Mock()
                 chunk.text = text
                 yield chunk
+
+        async def fake_stream(*args, **kwargs):
+            return _gen()
 
         mock_client.aio.models.generate_content_stream = fake_stream
 
@@ -187,11 +193,14 @@ class TestVertexProviderStream:
         mock_client = AsyncMock()
         mock_genai.Client.return_value = mock_client
 
-        async def fake_stream(*args, **kwargs):
+        async def _gen():
             for text in ["part1", " ", "part2"]:
                 chunk = Mock()
                 chunk.text = text
                 yield chunk
+
+        async def fake_stream(*args, **kwargs):
+            return _gen()
 
         mock_client.aio.models.generate_content_stream = fake_stream
 
@@ -211,9 +220,12 @@ class TestVertexProviderStream:
         mock_client = AsyncMock()
         mock_genai.Client.return_value = mock_client
 
-        async def fake_stream_error(*args, **kwargs):
+        async def _gen_error():
             yield Mock(text="first chunk")
             raise RuntimeError("network error mid-stream")
+
+        async def fake_stream_error(*args, **kwargs):
+            return _gen_error()
 
         mock_client.aio.models.generate_content_stream = fake_stream_error
 
