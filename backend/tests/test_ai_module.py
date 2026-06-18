@@ -592,8 +592,12 @@ class TestParseLlmJson:
         result = _parse_llm_json(raw)
         assert "content" in result
 
-    def test_no_json_raises(self):
-        import pytest
+    def test_multiple_invalid_escapes_iterative(self):
+        # Plusieurs escapes invalides résiduels — la correction itérative les traite un par un
+        raw = r'{"content": "a\qb\zc"}'
+        result = _parse_llm_json(raw)
+        assert "content" in result
 
+    def test_no_json_raises(self):
         with pytest.raises(ValueError, match="LLM did not return valid JSON"):
             _parse_llm_json("no json here")
