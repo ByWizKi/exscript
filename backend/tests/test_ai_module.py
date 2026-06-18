@@ -7,6 +7,7 @@ import pytest
 from app.llm.base import LLMMessage
 from app.modules.scripts.ai import (
     _fetch_sheets_context,
+    _parse_llm_json,
     ai_document_script_stream,
     ai_modify_script,
     ai_modify_script_stream,
@@ -566,3 +567,33 @@ async def test_ai_document_stream_no_js_files(db):
     event_types = [e["event"] for e in events]
     assert "result" in event_types
     assert "error" not in event_types
+
+
+class TestParseLlmJson:
+    def test_valid_json(self):
+        raw = '{"files": [{"filename": "Code.js", "content": "hello"}]}'
+        result = _parse_llm_json(raw)
+        assert result["files"][0]["filename"] == "Code.js"
+
+    def test_markdown_fence_stripped(self):
+        raw = '```json\n{"files": []}\n```'
+        result = _parse_llm_json(raw)
+        assert result["files"] == []
+
+    def test_invalid_letter_escape(self):
+        # Le LLM génère \s dans une string JSON (invalide) — doit être corrigé en \\s
+        raw = r'{"content": "var re = /\s+/g;"}'
+        result = _parse_llm_json(raw)
+        assert "content" in result
+
+    def test_invalid_digit_escape(self):
+        # \1 (backreference JS) est invalide en JSON — doit être corrigé en \\1
+        raw = r'{"content": "/(\d)\1/"}'
+        result = _parse_llm_json(raw)
+        assert "content" in result
+
+    def test_no_json_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="LLM did not return valid JSON"):
+            _parse_llm_json("no json here")

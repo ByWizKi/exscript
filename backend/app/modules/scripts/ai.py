@@ -68,7 +68,7 @@ def _parse_llm_json(raw: str) -> dict:
     start = raw.find("{")
     if start == -1:
         raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
-    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", raw[start:])
+    json_str = re.sub(r'\\([^"\\/bfnrtu])', r"\\\\\1", raw[start:])
     try:
         result, _ = json.JSONDecoder().raw_decode(json_str)
     except json.JSONDecodeError as exc:
