@@ -38,6 +38,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (status === "unauthenticated") router.replace("/login");
   }, [status, router]);
 
+  useEffect(() => {
+    if (session?.error === "RefreshAccessTokenError") {
+      window.dispatchEvent(new Event("session-expired"));
+    }
+  }, [session?.error]);
+
   const handleLogout = useCallback(async () => {
     await signOut({ callbackUrl: "/login" });
   }, []);
