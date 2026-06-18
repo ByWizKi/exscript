@@ -68,12 +68,18 @@ def _parse_llm_json(raw: str) -> dict:
     start = raw.find("{")
     if start == -1:
         raise ValueError(f"LLM did not return valid JSON. Response: {raw[:200]}")
-    json_str = re.sub(r'\\([^"\\/bfnrtu0-9])', r"\\\\\1", raw[start:])
-    try:
-        result, _ = json.JSONDecoder().raw_decode(json_str)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"LLM JSON parse error: {exc}. Response: {raw[:200]}") from exc
-    return result
+    json_str = re.sub(r'\\([^"\\/bfnrtu])', r"\\\\\1", raw[start:])
+    # Correction itérative : certains LLM génèrent des escapes invalides résiduels
+    # (ex. \0, \x, \a, \v, ou des combinaisons) non capturés par le regex initial.
+    for _ in range(20):
+        try:
+            result, _ = json.JSONDecoder().raw_decode(json_str)
+            return result
+        except json.JSONDecodeError as exc:
+            if "Invalid \\escape" not in str(exc) or exc.pos >= len(json_str):
+                raise ValueError(f"LLM JSON parse error: {exc}. Response: {raw[:200]}") from exc
+            json_str = json_str[: exc.pos] + "\\\\" + json_str[exc.pos + 1 :]
+    raise ValueError(f"LLM JSON parse error: trop d'escapes invalides. Response: {raw[:200]}")
 
 
 async def ai_clarify_script(
