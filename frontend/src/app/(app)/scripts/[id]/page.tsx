@@ -216,13 +216,15 @@ export default function ScriptDetailPage() {
         }
         if (!dataStr) continue;
         const payload = JSON.parse(dataStr) as Record<string, unknown>;
+        // Le backend wrape les données sous la clé "data", sauf pour les erreurs internes
+        const data = (payload.data ?? payload) as Record<string, unknown>;
 
         if (eventName === "step") {
-          setAiStep((payload.message as string) ?? null);
+          setAiStep((data.message as string) ?? null);
         } else if (eventName === "result") {
-          result = payload as unknown as AiResult;
+          result = data as unknown as AiResult;
         } else if (eventName === "error") {
-          throw new Error((payload.message as string) ?? "Erreur IA");
+          throw new Error((data.message as string) ?? (data.detail as string) ?? "Erreur IA");
         }
       }
     }
