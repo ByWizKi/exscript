@@ -46,7 +46,7 @@ export interface ChatMessageDB {
   id: number;
   role: "user" | "assistant";
   content: string;
-  message_type: "user" | "clarification" | "result" | "error";
+  message_type: "user" | "clarification" | "result" | "error" | "message";
   metadata_json: Record<string, unknown> | null;
   created_at: string;
 }
@@ -67,5 +67,6 @@ export interface ChatMessage {
   text: string;
   result?: AiResult;
   error?: string;
+  message?: string;
   clarification?: AiClarification;
 }

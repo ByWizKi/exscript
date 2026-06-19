@@ -122,6 +122,12 @@ class AIClarifyResponse(BaseModel):
     plan: list[str]
 
 
+class AiChatRequest(BaseModel):
+    prompt: str
+    google_access_token: str | None = None
+    history: list[ChatMessage] = []
+
+
 class PushRequest(BaseModel):
     access_token: str
 

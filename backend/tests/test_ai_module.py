@@ -8,6 +8,7 @@ from app.llm.base import LLMMessage
 from app.modules.scripts.ai import (
     _fetch_sheets_context,
     _parse_llm_json,
+    ai_chat_stream,
     ai_document_script_stream,
     ai_modify_script,
     ai_modify_script_stream,
@@ -567,6 +568,171 @@ async def test_ai_document_stream_no_js_files(db):
     event_types = [e["event"] for e in events]
     assert "result" in event_types
     assert "error" not in event_types
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_stream_modification(db):
+    """ai_chat_stream retourne event result quand le LLM modifie des fichiers."""
+    data = ScriptCreate(
+        name="Chat Test",
+        gas_script_id="chat_id",
+        spreadsheet_id="sheet_chat",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    json_response = (
+        '{"files": [{"filename": "Code.js", "content": "function f(){ return 1; }",'
+        ' "file_type": "server_js"}], "version_message": "Ajout retour"}'
+    )
+
+    async def fake_stream(messages):
+        yield json_response
+
+    with patch("app.llm.factory.get_provider") as mock_get_provider:
+        mock_provider = MagicMock()
+        mock_provider.complete_stream = fake_stream
+        mock_get_provider.return_value = mock_provider
+
+        events = await _collect_events(
+            ai_chat_stream(
+                script_id=script.id,
+                prompt="Ajoute un return 1",
+                db=db,
+                owner_email="test@example.com",
+            )
+        )
+
+    event_types = [e["event"] for e in events]
+    assert "result" in event_types
+    assert "done" in event_types
+    assert "error" not in event_types
+
+    result_event = next(e for e in events if e["event"] == "result")
+    assert "files" in result_event["data"]
+    assert "version_message" in result_event["data"]
+    assert "version_id" in result_event["data"]
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_stream_message(db):
+    """ai_chat_stream retourne event message quand le LLM répond en texte."""
+    data = ScriptCreate(
+        name="Chat Message Test",
+        gas_script_id="chat_msg_id",
+        spreadsheet_id="sheet_msg",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    json_response = '{"message": "Ce script fait X, Y et Z."}'
+
+    async def fake_stream(messages):
+        yield json_response
+
+    with patch("app.llm.factory.get_provider") as mock_get_provider:
+        mock_provider = MagicMock()
+        mock_provider.complete_stream = fake_stream
+        mock_get_provider.return_value = mock_provider
+
+        events = await _collect_events(
+            ai_chat_stream(
+                script_id=script.id,
+                prompt="Explique ce script",
+                db=db,
+                owner_email="test@example.com",
+            )
+        )
+
+    event_types = [e["event"] for e in events]
+    assert "message" in event_types
+    assert "done" in event_types
+    assert "result" not in event_types
+    assert "error" not in event_types
+
+    msg_event = next(e for e in events if e["event"] == "message")
+    assert "text" in msg_event["data"]
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_stream_invalid_json(db):
+    """JSON invalide → event error."""
+    data = ScriptCreate(
+        name="Chat JSON Error",
+        gas_script_id="chat_json_err",
+        spreadsheet_id="sheet_json_err2",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    async def fake_stream(messages):
+        yield "not json at all"
+
+    with patch("app.llm.factory.get_provider") as mock_get_provider:
+        mock_provider = MagicMock()
+        mock_provider.complete_stream = fake_stream
+        mock_get_provider.return_value = mock_provider
+
+        events = await _collect_events(
+            ai_chat_stream(
+                script_id=script.id,
+                prompt="test",
+                db=db,
+                owner_email="test@example.com",
+            )
+        )
+
+    event_types = [e["event"] for e in events]
+    assert "error" in event_types
+    assert "result" not in event_types
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_stream_unknown_file_ignored(db):
+    """Fichier inconnu retourné par le LLM → ignoré silencieusement."""
+    data = ScriptCreate(
+        name="Chat Unknown File",
+        gas_script_id="chat_unk_id",
+        spreadsheet_id="sheet_unk",
+        files=[ScriptFileIn(filename="Code.js", content="function f(){}", file_type="server_js")],
+    )
+    script = await create_script(data, "test@example.com", db)
+
+    json_response = (
+        '{"files": [{"filename": "Unknown.js", "content": "bad",'
+        ' "file_type": "server_js"}], "version_message": "Should be ignored"}'
+    )
+
+    async def fake_stream(messages):
+        yield json_response
+
+    with patch("app.llm.factory.get_provider") as mock_get_provider:
+        mock_provider = MagicMock()
+        mock_provider.complete_stream = fake_stream
+        mock_get_provider.return_value = mock_provider
+
+        events = await _collect_events(
+            ai_chat_stream(
+                script_id=script.id,
+                prompt="test",
+                db=db,
+                owner_email="test@example.com",
+            )
+        )
+
+    # Le fichier inconnu est ignoré → files est vide → ni result ni message
+    # Le LLM n'a retourné que des fichiers inconnus → traité comme erreur
+    event_types = [e["event"] for e in events]
+    assert "error" in event_types
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_stream_script_not_found(db):
+    """Script inexistant → event error."""
+    events = await _collect_events(
+        ai_chat_stream(script_id=99999, prompt="test", db=db, owner_email="test@example.com")
+    )
+    assert any(e["event"] == "error" for e in events)
 
 
 class TestParseLlmJson:

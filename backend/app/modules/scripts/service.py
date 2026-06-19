@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.script import Script
 
 from .ai import (
+    ai_chat_stream,
     ai_clarify_script,
     ai_document_script,
     ai_document_script_stream,
@@ -113,6 +114,17 @@ def stream_ai_modification(
     base_files: list | None = None,
 ) -> AsyncIterator[dict]:
     return ai_modify_script_stream(script_id, prompt, db, google_access_token, history, base_files)
+
+
+def stream_ai_chat(
+    script_id: int,
+    prompt: str,
+    db: AsyncSession,
+    owner_email: str,
+    google_access_token: str | None = None,
+    history: list | None = None,
+) -> AsyncIterator[dict]:
+    return ai_chat_stream(script_id, prompt, db, owner_email, google_access_token, history)
 
 
 def stream_ai_document(

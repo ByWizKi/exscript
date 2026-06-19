@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import {
-  Loader2, Bot, Send, AlertCircle, Check, X, BookOpen,
+  Loader2, Bot, Send, AlertCircle, Check, BookOpen,
   FileText, Trash2, ChevronRight, ChevronDown,
 } from "lucide-react";
 import { PromptLibrary } from "./PromptLibrary";
@@ -21,8 +21,6 @@ interface AiChatProps {
   currentFiles: ScriptFile[];
   onSend: (prompt: string) => void;
   onSelectFile?: (filename: string, result: AiResult) => void;
-  onConfirm?: (originalPrompt: string) => void;
-  onCancelClarification?: () => void;
   onDocument?: () => void;
   onClearChat?: () => void;
   prompt: string;
@@ -71,8 +69,6 @@ export function AiChat({
   currentFiles,
   onSend,
   onSelectFile,
-  onConfirm,
-  onCancelClarification,
   onDocument,
   onClearChat,
   prompt,
@@ -221,70 +217,9 @@ export function AiChat({
               <div className="max-w-[85%] bg-extia-night/8 dark:bg-extia-yellow/15 border border-extia-night/20 dark:border-extia-yellow/25 text-extia-night dark:text-white text-xs rounded-2xl rounded-tr-sm px-3 py-2.5">
                 {msg.text}
               </div>
-            ) : msg.clarification ? (
-              <div className={`max-w-[90%] border text-xs rounded-2xl rounded-tl-sm px-3 py-2.5 space-y-2 ${
-                msg.clarification.feasible === false
-                  ? "bg-red-500/10 border-red-500/20"
-                  : "bg-slate-100 dark:bg-white/[0.06] border-slate-200 dark:border-white/10"
-              }`}>
-                {msg.clarification.type === "explanation" ? (
-                  <div className="text-slate-600 dark:text-white/80 leading-relaxed [&_h1]:text-base [&_h1]:font-semibold [&_h1]:mb-2 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-medium [&_h3]:mt-2 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-0.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-0.5 [&_strong]:font-semibold [&_p]:mb-2 [&_p:last-child]:mb-0 [&_code]:bg-slate-200 dark:[&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
-                    <ReactMarkdown>{msg.clarification.explanation}</ReactMarkdown>
-                  </div>
-                ) : (
-                  <>
-                    <p className={`font-medium ${msg.clarification.feasible === false ? "text-red-400" : "text-extia-night dark:text-extia-yellow"}`}>
-                      {msg.clarification.reformulation}
-                    </p>
-                    {msg.clarification.plan.length > 0 && (
-                      <ul className="space-y-1">
-                        {msg.clarification.plan.map((step, si) => (
-                          <li key={si} className="flex items-start gap-1.5 text-slate-500 dark:text-white/60">
-                            <span className="text-extia-night/40 dark:text-white/30 flex-shrink-0">{si + 1}.</span>
-                            <span>{step}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {msg.clarification.files_affected.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-1">
-                        {msg.clarification.files_affected.map((f) => (
-                          <span key={f} className="text-[10px] font-mono bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-white/50 rounded px-1.5 py-0.5">
-                            {f}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {msg.clarification.confirmed === null && (
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => onConfirm?.(msg.clarification!.original_prompt)}
-                          disabled={aiLoading}
-                          className="flex items-center gap-1 bg-extia-night dark:bg-extia-yellow text-white dark:text-extia-night text-[11px] font-bold px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors"
-                        >
-                          <Check className="h-3 w-3" />
-                          Confirmer
-                        </button>
-                        <button
-                          onClick={() => onCancelClarification?.()}
-                          disabled={aiLoading}
-                          className="flex items-center gap-1 bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-white/60 text-[11px] font-bold px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                          Annuler
-                        </button>
-                      </div>
-                    )}
-                    {msg.clarification.confirmed === true && (
-                      <p className="text-[10px] text-slate-400 dark:text-white/30 flex items-center gap-1">
-                        <Check className="h-3 w-3 text-green-500" /> Confirmé — génération en cours…
-                      </p>
-                    )}
-                    {msg.clarification.confirmed === false && msg.clarification.feasible !== false && (
-                      <p className="text-[10px] text-slate-400 dark:text-white/30">Annulé.</p>
-                    )}
-                  </>
-                )}
+            ) : msg.message ? (
+              <div className="max-w-[90%] bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/80 text-xs rounded-2xl rounded-tl-sm px-3 py-2.5 leading-relaxed [&_h1]:text-base [&_h1]:font-semibold [&_h1]:mb-2 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-0.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-0.5 [&_strong]:font-semibold [&_p]:mb-2 [&_p:last-child]:mb-0 [&_code]:bg-slate-200 dark:[&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs">
+                <ReactMarkdown>{msg.message}</ReactMarkdown>
               </div>
             ) : msg.error ? (
               <div className="max-w-[90%] bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-2xl rounded-tl-sm px-3 py-2.5 flex items-start gap-2">
