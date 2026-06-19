@@ -14,6 +14,7 @@ from app.core.deps import get_current_email
 from app.db.session import get_db
 
 from .schemas import (
+    AiChatRequest,
     AIClarifyRequest,
     AIClarifyResponse,
     AIModifyRequest,
@@ -39,6 +40,7 @@ from .service import (
     list_all_scripts,
     preview_pull,
     restore_version,
+    stream_ai_chat,
     stream_ai_document,
     stream_ai_modification,
     sync_pull,
@@ -305,6 +307,23 @@ async def ai_document_stream_endpoint(
 ) -> StreamingResponse:
     base_files = [f.model_dump() for f in body.base_files] if body.base_files else None
     gen = stream_ai_document(script_id, db, base_files)
+    return StreamingResponse(
+        _sse_stream(gen),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/{script_id}/ai-chat")
+async def ai_chat_endpoint(
+    script_id: int,
+    body: AiChatRequest,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    email: str = Depends(get_current_email),
+) -> StreamingResponse:
+    gen = stream_ai_chat(
+        script_id, body.prompt, db, email, body.google_access_token, body.history or None
+    )
     return StreamingResponse(
         _sse_stream(gen),
         media_type="text/event-stream",

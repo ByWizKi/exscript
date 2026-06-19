@@ -17,7 +17,6 @@ import type {
   Script,
   ScriptVersion,
   AiResult,
-  AiClarification,
   ChatMessage,
   ChatMessageDB,
 } from "../_detail/types";
@@ -89,23 +88,6 @@ export default function ScriptDetailPage() {
       const history: ChatMessageDB[] = await res.json();
       const loaded: ChatMessage[] = history.map((m) => {
         if (m.role === "user") return { role: "user" as const, text: m.content };
-        if (m.message_type === "clarification" && m.metadata_json) {
-          const c = m.metadata_json as Record<string, unknown>;
-          return {
-            role: "assistant" as const,
-            text: "",
-            clarification: {
-              type: (c.type as "modification" | "explanation") ?? "modification",
-              feasible: (c.feasible as boolean) ?? true,
-              reformulation: (c.reformulation as string) ?? "",
-              explanation: (c.explanation as string) ?? "",
-              files_affected: (c.files_affected as string[]) ?? [],
-              plan: (c.plan as string[]) ?? [],
-              original_prompt: "",
-              confirmed: false,
-            } satisfies AiClarification,
-          };
-        }
         if (m.message_type === "result" && m.metadata_json) {
           const r = m.metadata_json as Record<string, unknown>;
           const result = r as unknown as AiResult;
@@ -114,6 +96,9 @@ export default function ScriptDetailPage() {
             text: (r.version_message as string) ?? "",
             result,
           };
+        }
+        if (m.message_type === "message") {
+          return { role: "assistant" as const, text: "", message: m.content };
         }
         return { role: "assistant" as const, text: m.content };
       });
@@ -238,19 +223,13 @@ export default function ScriptDetailPage() {
     if (!text || aiLoading || !session?.backendToken) return;
 
     setPrompt("");
-    setMessages((prev) => [
-      ...prev.map((m) =>
-        m.clarification?.confirmed === null
-          ? { ...m, clarification: { ...m.clarification, confirmed: false as const } }
-          : m
-      ),
-      { role: "user" as const, text },
-    ]);
+    setMessages((prev) => [...prev, { role: "user" as const, text }]);
     setAiLoading(true);
+    setAiStep("Traitement en cours…");
 
     try {
       const res = await apiFetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-clarify`,
+        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-chat`,
         {
           method: "POST",
           headers: {
@@ -264,92 +243,61 @@ export default function ScriptDetailPage() {
               .filter((m: ChatMessage) => !m.error)
               .map((m: ChatMessage) => ({
                 role: m.role,
-                content: m.clarification
-                  ? `[Analyse IA] ${m.clarification.reformulation || m.clarification.explanation}`
-                  : m.text,
+                content: m.message ?? m.text,
               })),
           }),
         }
       );
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Erreur serveur");
+      if (!res.ok || !res.body) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error((d as { detail?: string }).detail ?? "Erreur serveur");
+      }
 
-      const isExplanation = data.type === "explanation";
-      const clarification: AiClarification = {
-        type: data.type ?? "modification",
-        feasible: data.feasible ?? true,
-        reformulation: data.reformulation ?? "",
-        explanation: data.explanation ?? "",
-        files_affected: data.files_affected ?? [],
-        plan: data.plan ?? [],
-        original_prompt: text,
-        confirmed: (isExplanation || data.feasible === false) ? false : null,
-      };
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      setMessages((prev: ChatMessage[]) => [
-        ...prev,
-        { role: "assistant" as const, text: "", clarification },
-      ]);
-    } catch (e) {
-      setMessages((prev: ChatMessage[]) => [
-        ...prev,
-        {
-          role: "assistant" as const,
-          text: "",
-          error: e instanceof Error ? e.message : "Erreur inconnue",
-        },
-      ]);
-    } finally {
-      setAiLoading(false);
-    }
-  };
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-  const handleConfirm = async (originalPrompt: string) => {
-    if (aiLoading || !session?.backendToken) return;
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() ?? "";
 
-    setMessages((prev: ChatMessage[]) =>
-      prev.map((m) =>
-        m.clarification?.original_prompt === originalPrompt && m.clarification.confirmed === null
-          ? { ...m, clarification: { ...m.clarification, confirmed: true } }
-          : m
-      )
-    );
-    setAiLoading(true);
-    setAiStep(null);
+        for (const block of blocks) {
+          let eventName = "";
+          let dataStr = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataStr = line.slice(5).trim();
+          }
+          if (!dataStr) continue;
+          const payload = JSON.parse(dataStr) as Record<string, unknown>;
+          const data = (payload.data ?? payload) as Record<string, unknown>;
 
-    try {
-      const history = messages
-        .filter((m: ChatMessage) => !m.error)
-        .map((m: ChatMessage) => ({
-          role: m.role,
-          content: m.clarification
-            ? `[Analyse IA] ${m.clarification.reformulation || m.clarification.explanation}`
-            : m.text,
-        }));
-
-      const result = await readSseStream(
-        `${process.env.NEXT_PUBLIC_API_URL}/scripts/${id}/ai-modify-stream`,
-        {
-          prompt: originalPrompt,
-          google_access_token: session.googleAccessToken,
-          history,
-          base_files: pendingResult?.files ?? null,
-        },
-        session.backendToken
-      );
-
-      setPendingResult(result);
-
-      const firstMod = result.files.find(
-        (f) => f.content !== currentFiles.find((cf) => cf.filename === f.filename)?.content
-      );
-      if (firstMod) setSelectedFilename(firstMod.filename);
-
-      setMessages((prev: ChatMessage[]) => [
-        ...prev,
-        { role: "assistant" as const, text: result.version_message, result },
-      ]);
+          if (eventName === "result") {
+            const result: AiResult = {
+              files: data.files as AiResult["files"],
+              version_message: data.version_message as string,
+            };
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant" as const, text: result.version_message, result },
+            ]);
+            await fetchScript();
+          } else if (eventName === "message") {
+            const msgText = data.text as string;
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant" as const, text: "", message: msgText },
+            ]);
+          } else if (eventName === "error") {
+            throw new Error((data.detail as string) ?? "Erreur IA");
+          }
+        }
+      }
     } catch (e) {
       setMessages((prev: ChatMessage[]) => [
         ...prev,
@@ -405,16 +353,6 @@ export default function ScriptDetailPage() {
     } catch {
       // ignore
     }
-  };
-
-  const handleCancelClarification = () => {
-    setMessages((prev: ChatMessage[]) =>
-      prev.map((m) =>
-        m.clarification?.confirmed === null
-          ? { ...m, clarification: { ...m.clarification, confirmed: false } }
-          : m
-      )
-    );
   };
 
   const handleApply = async (message: string) => {
@@ -704,8 +642,6 @@ export default function ScriptDetailPage() {
             setSelectedFilename(filename);
             setPendingResult(result);
           }}
-          onConfirm={handleConfirm}
-          onCancelClarification={handleCancelClarification}
           onDocument={handleDocument}
           onClearChat={handleClearChat}
           prompt={prompt}

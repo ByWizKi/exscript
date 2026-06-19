@@ -700,6 +700,153 @@ Expected response (illustrative, not literal — only utils.gs is modified, Code
         yield {"event": "error", "data": {"detail": str(err)}}
 
 
+async def ai_chat_stream(
+    script_id: int,
+    prompt: str,
+    db: AsyncSession,
+    owner_email: str,
+    google_access_token: str | None = None,
+    history: list | None = None,
+):
+    """Générateur async pour le pipeline IA direct : modification ou réponse textuelle."""
+    from types import SimpleNamespace
+
+    from app.llm.base import LLMMessage
+    from app.llm.factory import get_provider
+
+    from .crud import add_version
+
+    try:
+        script = await get_script(script_id, db)
+        if not script:
+            yield {"event": "error", "data": {"detail": "Script not found"}}
+            return
+
+        latest = script.versions[-1] if script.versions else None
+        if not latest or not latest.files:
+            yield {"event": "error", "data": {"detail": "No files found in the latest version"}}
+            return
+
+        files = [
+            {"filename": f.filename, "content": f.content, "file_type": f.file_type}
+            for f in latest.files
+        ]
+        files_context = "\n\n".join(
+            f"### {f['filename']}\n```javascript\n{f['content']}\n```" for f in files
+        )
+        project_name = script.name
+
+        system_prompt = (
+            "Tu es un expert Google Apps Script intégré à ExScript, "
+            "un outil de versioning de projets GAS.\n"
+            "Tu reçois le contenu complet de tous les fichiers du projet et une demande utilisateur.\n\n"
+            "Si la demande est une modification de code :\n"
+            '- Retourne UNIQUEMENT un JSON : {"files": [{"filename": "...", "content": "...", "file_type": "..."}], "version_message": "..."}\n'
+            "- N'inclus que les fichiers modifiés. Le contenu doit être le fichier entier réécrit.\n"
+            "- file_type doit être en minuscules : server_js, html, json.\n\n"
+            "Si la demande est une question ou une demande d'explication :\n"
+            '- Retourne UNIQUEMENT un JSON : {"message": "ta réponse en français"}\n\n'
+            "Ne génère jamais de texte autour du JSON."
+        )
+
+        user_message = (
+            f'Fichiers du projet "{project_name}" :\n\n{files_context}\n\nDemande : {prompt}'
+        )
+
+        llm_messages: list[LLMMessage] = [LLMMessage(role="system", content=system_prompt)]
+        for h in history or []:
+            llm_messages.append(LLMMessage(role=h.role, content=h.content))
+        llm_messages.append(LLMMessage(role="user", content=user_message))
+
+        await save_chat_message(
+            script_id=script_id,
+            role="user",
+            content=prompt,
+            message_type="user",
+            db=db,
+        )
+
+        provider = get_provider(name="vertex", model="gemini-2.5-pro", api_key="")
+        raw = await _complete_accumulate(provider, llm_messages)
+        result = _parse_llm_json(raw)
+
+        if result.get("files"):
+            known = {f["filename"] for f in files}
+            modified_map = {f["filename"]: f for f in result["files"] if f["filename"] in known}
+            if not modified_map:
+                import logging
+
+                logging.getLogger(__name__).error(
+                    "ai_chat_stream: LLM n'a retourné que des fichiers inconnus: %s",
+                    [f["filename"] for f in result["files"]],
+                )
+                yield {
+                    "event": "error",
+                    "data": {"detail": "Le LLM n'a retourné que des fichiers inconnus"},
+                }
+                return
+            merged = []
+            for f in files:
+                if f["filename"] in modified_map:
+                    mf = dict(modified_map[f["filename"]])
+                    mf["file_type"] = mf.get("file_type", f["file_type"]).lower()
+                    merged.append(mf)
+                else:
+                    merged.append(dict(f))
+
+            version_message = result.get("version_message") or "Modification du script"
+            file_objects = [SimpleNamespace(**f) for f in merged]
+            await add_version(script_id, file_objects, version_message, owner_email, db)
+
+            updated = await get_script(script_id, db)
+            version_id = updated.versions[-1].id if updated and updated.versions else None
+
+            result_payload = {
+                "files": merged,
+                "version_message": version_message,
+                "version_id": version_id,
+            }
+
+            await save_chat_message(
+                script_id=script_id,
+                role="assistant",
+                content="",
+                message_type="result",
+                db=db,
+                metadata_json=result_payload,
+            )
+
+            yield {"event": "result", "data": result_payload}
+
+        elif "message" in result:
+            text = str(result["message"])
+            await save_chat_message(
+                script_id=script_id,
+                role="assistant",
+                content=text,
+                message_type="message",
+                db=db,
+            )
+            yield {"event": "message", "data": {"text": text}}
+
+        else:
+            import logging
+
+            logging.getLogger(__name__).error(
+                "ai_chat_stream: LLM n'a retourné ni files ni message: %s", result
+            )
+            yield {
+                "event": "error",
+                "data": {"detail": "Le LLM n'a retourné ni fichiers ni message"},
+            }
+            return
+
+        yield {"event": "done", "data": {}}
+
+    except Exception as err:
+        yield {"event": "error", "data": {"detail": str(err)}}
+
+
 async def ai_document_script_stream(
     script_id: int,
     db: AsyncSession,
